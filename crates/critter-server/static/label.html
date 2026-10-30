@@ -43,6 +43,7 @@
   <button id="train">Train</button>
   <label title="Pairs from images the model has never trained on. Your pick is kept out of training and compared with the model's."><input type="checkbox" id="validate"> Validate</label>
   <button id="promote" hidden title="Move all validation pairs into training">Promote</button>
+  <label title="Move to the next species after every pick, skip or hide."><input type="checkbox" id="rotate"> Round robin</label>
   <span>Pairs: <strong id="count">–</strong></span>
   <span id="accuracy"></span>
   <span>Pick the better photo. <kbd>A</kbd>/<kbd>←</kbd> left, <kbd>B</kbd>/<kbd>→</kbd> right, <kbd>S</kbd> skip, <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> never show left/both/right.</span>
@@ -87,6 +88,10 @@
     load();
   });
 
+  const rotate = document.getElementById('rotate');
+  rotate.checked = localStorage.getItem('rotate') === 'true';
+  rotate.addEventListener('change', () => localStorage.setItem('rotate', rotate.checked));
+
   let current = null;
 
   function showAccuracy(stats) {
@@ -128,6 +133,7 @@
     }
   }
 
+  // Returns whether a pair is now on screen.
   async function load() {
     // Drop the old pair immediately so clicks during the swap do nothing.
     current = null;
@@ -140,6 +146,7 @@
       if (!a || !b) status.textContent = 'An image failed to load. Skip, or hide it.';
       current = pair;
       count.textContent = pair.pairs;
+      return true;
     } catch (error) {
       let message = `Could not load a pair: ${error.message}`;
       if (error.message === '401 Unauthorized') message = 'Enter the admin token.';
@@ -147,8 +154,21 @@
       else if (error.message.startsWith('503')) message = `Fewer than two embedded ${species.value} images. Run a seed first.`;
       // Keep whatever the previous action reported, such as a promote count.
       status.textContent = [status.textContent, message].filter(Boolean).join(' ');
+      return false;
     } finally {
       setLoading(false);
+    }
+  }
+
+  // The next pair after a pick, skip or hide. In round robin, this moves to
+  // the next species first. Species with no pair to offer, such as one whose
+  // validation pool is used up, are passed over.
+  async function next() {
+    if (!rotate.checked) return load();
+    for (let tries = 0; tries < species.options.length; tries++) {
+      species.selectedIndex = (species.selectedIndex + 1) % species.options.length;
+      localStorage.setItem('species', species.value);
+      if (await load()) return;
     }
   }
 
@@ -174,7 +194,7 @@
         }
         await new Promise((resolve) => setTimeout(resolve, 1500));
       }
-      await load();
+      await next();
     } catch (error) {
       status.textContent = `Could not save: ${error.message}`;
     }
@@ -205,7 +225,7 @@
         ? `Hidden. ${verdicts.join(', ')}.`
         : `Hidden ${targets.map((target) => `#${target.id}`).join(' and ')}.`;
       if (validation) await new Promise((resolve) => setTimeout(resolve, 1500));
-      await load();
+      await next();
     } catch (error) {
       current = pair;
       status.textContent = `Could not hide: ${error.message}`;
@@ -254,7 +274,7 @@
 
   document.getElementById('a').addEventListener('click', () => pick('a'));
   document.getElementById('b').addEventListener('click', () => pick('b'));
-  document.getElementById('skip').addEventListener('click', load);
+  document.getElementById('skip').addEventListener('click', next);
   document.querySelectorAll('#hide button').forEach((button) => button.addEventListener('click', () => hide(button.dataset.side)));
   document.getElementById('train').addEventListener('click', train);
   promote.addEventListener('click', async () => {
@@ -271,7 +291,7 @@
     const key = event.key.toLowerCase();
     if (key === 'a' || key === 'arrowleft') pick('a');
     else if (key === 'b' || key === 'arrowright') pick('b');
-    else if (key === 's') load();
+    else if (key === 's') next();
     else if (key === '1') hide('a');
     else if (key === '2') hide('both');
     else if (key === '3') hide('b');
