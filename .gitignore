@@ -3,3 +3,4 @@
 .env
 .remember/
 .playwright-mcp/
+.DS_Store
