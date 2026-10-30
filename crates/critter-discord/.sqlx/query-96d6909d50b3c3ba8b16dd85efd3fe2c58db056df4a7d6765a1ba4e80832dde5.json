@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select channel_id, species, cadence from webhooks where guild_id = $1\n         order by channel_id, species, cadence",
+  "query": "select channel_id, species, cadence, post_at, timezone from webhooks\n         where guild_id = $1 order by channel_id, species, cadence",
   "describe": {
     "columns": [
       {
@@ -35,6 +35,28 @@
             "name": "cadence"
           }
         }
+      },
+      {
+        "ordinal": 3,
+        "name": "post_at",
+        "type_info": "Time",
+        "origin": {
+          "Table": {
+            "table": "webhooks",
+            "name": "post_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "timezone",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "webhooks",
+            "name": "timezone"
+          }
+        }
       }
     ],
     "parameters": {
@@ -45,8 +67,10 @@
     "nullable": [
       false,
       false,
+      false,
+      false,
       false
     ]
   },
-  "hash": "8ac72d70c8f393e8336012b5b2b97a649dc50c5be894db33474b3d82dd5fb9f9"
+  "hash": "96d6909d50b3c3ba8b16dd85efd3fe2c58db056df4a7d6765a1ba4e80832dde5"
 }

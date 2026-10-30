@@ -21,6 +21,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
 
+chrono-tz = "0.10"
 serenity = { version = "0.12", default-features = false, features = ["builder", "http", "interactions_endpoint", "model", "rustls_backend"] }
 
 critter-types.workspace = true

@@ -3,7 +3,7 @@
 //! `SQLX_OFFLINE=true`. Run `cargo sqlx prepare` from this crate's directory
 //! after changing one.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveTime, Utc};
 use critter_types::Kind;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -49,31 +49,71 @@ pub struct Webhook {
     pub url: String,
     pub species: String,
     pub cadence: String,
+    /// Local time a daily subscription posts at, in `timezone`.
+    pub post_at: NaiveTime,
+    /// IANA time zone name, e.g. `Europe/Stockholm`.
+    pub timezone: String,
+    pub last_fired_slot: Option<DateTime<Utc>>,
 }
 
-/// Subscribe a channel. Returns `false` if it already had this subscription.
-pub async fn insert_webhook(
-    pool: &PgPool,
-    guild: i64,
-    channel: i64,
-    url: &str,
-    species: &str,
-    cadence: Cadence,
-) -> sqlx::Result<bool> {
+/// Where and how a channel subscribes.
+pub struct NewSubscription<'a> {
+    pub guild: i64,
+    pub channel: i64,
+    pub url: &'a str,
+    pub species: &'a str,
+    pub cadence: Cadence,
+    pub post_at: NaiveTime,
+    pub timezone: &'a str,
+}
+
+/// Subscribe a channel. Returns `false` if it already gets this species.
+pub async fn insert_webhook(pool: &PgPool, new: &NewSubscription<'_>) -> sqlx::Result<bool> {
     let result = sqlx::query!(
-        "insert into webhooks (id, guild_id, channel_id, url, species, cadence)
-         values ($1, $2, $3, $4, $5, $6)
-         on conflict (channel_id, species, cadence) do nothing",
+        "insert into webhooks (id, guild_id, channel_id, url, species, cadence, post_at, timezone)
+         values ($1, $2, $3, $4, $5, $6, $7, $8)
+         on conflict (channel_id, species) do nothing",
         Uuid::new_v4(),
-        guild,
-        channel,
-        url,
-        species,
-        cadence.as_str(),
+        new.guild,
+        new.channel,
+        new.url,
+        new.species,
+        new.cadence.as_str(),
+        new.post_at,
+        new.timezone,
     )
     .execute(pool)
     .await?;
     Ok(result.rows_affected() == 1)
+}
+
+/// Change the settings that are `Some` and keep the rest. Returns the
+/// subscription as it now stands, or `None` if the channel does not get this
+/// species.
+pub async fn configure(
+    pool: &PgPool,
+    channel: i64,
+    species: &str,
+    cadence: Option<Cadence>,
+    post_at: Option<NaiveTime>,
+    timezone: Option<&str>,
+) -> sqlx::Result<Option<Subscription>> {
+    sqlx::query_as!(
+        Subscription,
+        "update webhooks
+         set cadence = coalesce($3, cadence),
+             post_at = coalesce($4, post_at),
+             timezone = coalesce($5, timezone)
+         where channel_id = $1 and species = $2
+         returning channel_id, species, cadence, post_at, timezone",
+        channel,
+        species,
+        cadence.map(Cadence::as_str),
+        post_at,
+        timezone,
+    )
+    .fetch_optional(pool)
+    .await
 }
 
 /// The webhook a channel's subscriptions already use, if any.
@@ -89,14 +129,11 @@ pub async fn delete_subscription(
     pool: &PgPool,
     channel: i64,
     species: &str,
-    cadence: Cadence,
 ) -> sqlx::Result<Option<String>> {
     sqlx::query_scalar!(
-        "delete from webhooks where channel_id = $1 and species = $2 and cadence = $3
-         returning url",
+        "delete from webhooks where channel_id = $1 and species = $2 returning url",
         channel,
         species,
-        cadence.as_str(),
     )
     .fetch_optional(pool)
     .await
@@ -118,36 +155,38 @@ pub async fn delete_webhook_url(pool: &PgPool, url: &str) -> sqlx::Result<()> {
     Ok(())
 }
 
-/// A server's subscriptions as `(channel, species, cadence)`.
-pub async fn guild_subscriptions(
-    pool: &PgPool,
-    guild: i64,
-) -> sqlx::Result<Vec<(i64, String, String)>> {
-    sqlx::query!(
-        "select channel_id, species, cadence from webhooks where guild_id = $1
-         order by channel_id, species, cadence",
+/// One line of `/critters list`.
+pub struct Subscription {
+    pub channel_id: i64,
+    pub species: String,
+    pub cadence: String,
+    pub post_at: NaiveTime,
+    pub timezone: String,
+}
+
+/// A server's subscriptions, by channel.
+pub async fn guild_subscriptions(pool: &PgPool, guild: i64) -> sqlx::Result<Vec<Subscription>> {
+    sqlx::query_as!(
+        Subscription,
+        "select channel_id, species, cadence, post_at, timezone from webhooks
+         where guild_id = $1 order by channel_id, species, cadence",
         guild,
     )
-    .map(|row| (row.channel_id, row.species, row.cadence))
     .fetch_all(pool)
     .await
 }
 
-/// Webhooks that have not yet fired for the current slot of their cadence.
-pub async fn due_webhooks(
-    pool: &PgPool,
-    hour_slot: DateTime<Utc>,
-    day_slot: DateTime<Utc>,
-) -> sqlx::Result<Vec<Webhook>> {
+/// Hourly webhooks that have not fired for `hour_slot`, and every daily
+/// webhook. Whether a daily one is due depends on its time zone, which the
+/// scheduler works out.
+pub async fn due_webhooks(pool: &PgPool, hour_slot: DateTime<Utc>) -> sqlx::Result<Vec<Webhook>> {
     sqlx::query_as!(
         Webhook,
-        "select id, url, species, cadence
+        "select id, url, species, cadence, post_at, timezone, last_fired_slot
          from webhooks
-         where (cadence = 'hourly' and (last_fired_slot is null or last_fired_slot < $1))
-            or (cadence = 'daily' and (last_fired_slot is null or last_fired_slot < $2))
+         where cadence = 'daily' or last_fired_slot is null or last_fired_slot < $1
          order by created_at",
         hour_slot,
-        day_slot,
     )
     .fetch_all(pool)
     .await
