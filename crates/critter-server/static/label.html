@@ -23,9 +23,13 @@
   figure.loading img { visibility: hidden; }
   figure.loading::after { content: "Loading…"; position: absolute; inset: 0; display: grid; place-items: center; font-size: 1.2rem; opacity: .6; }
   figcaption { padding: .4rem; font-size: .9rem; opacity: .8; }
-  #hide { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  #hide { display: grid; grid-template-columns: 1fr auto 1fr; gap: 1rem; }
   #hide button { font: inherit; padding: .4rem .6rem; justify-self: center; opacity: .7; }
   #status { min-height: 1.5rem; opacity: .8; }
+  #history table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  #history th, #history td { text-align: right; padding: .2rem .8rem; }
+  #history th:first-child, #history td:first-child { text-align: left; }
+  #history .note { font-size: .85rem; opacity: .7; }
   kbd { border: 1px solid currentColor; border-radius: 3px; padding: 0 .3rem; font-size: .85em; }
 </style>
 </head>
@@ -41,7 +45,7 @@
   <button id="promote" hidden title="Move all validation pairs into training">Promote</button>
   <span>Pairs: <strong id="count">–</strong></span>
   <span id="accuracy"></span>
-  <span>Pick the better photo. <kbd>A</kbd>/<kbd>←</kbd> left, <kbd>B</kbd>/<kbd>→</kbd> right, <kbd>S</kbd> skip, <kbd>1</kbd>/<kbd>2</kbd> never show.</span>
+  <span>Pick the better photo. <kbd>A</kbd>/<kbd>←</kbd> left, <kbd>B</kbd>/<kbd>→</kbd> right, <kbd>S</kbd> skip, <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> never show left/both/right.</span>
 </header>
 <section id="pair">
   <figure id="a" tabindex="0"><img alt="Candidate A"><figcaption></figcaption></figure>
@@ -49,9 +53,18 @@
 </section>
 <section id="hide">
   <button data-side="a">Never show left</button>
+  <button data-side="both">Never show either</button>
   <button data-side="b">Never show right</button>
 </section>
 <p id="status"></p>
+<details id="history">
+  <summary>Training history</summary>
+  <p class="note">Validation accuracy is only comparable between rows with the same validation total. Promoting resets it.</p>
+  <table>
+    <thead><tr><th>When</th><th>Training pairs</th><th>Training accuracy</th><th>Validation accuracy</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</details>
 <script>
   // Token and species persist across reloads. The token only ever goes to
   // this origin as a bearer header.
@@ -169,14 +182,24 @@
 
   // Hidden images never appear in slots or pairs again. No confirmation, since
   // the worst case is one fewer photo in the pool.
+  // `side` is 'a', 'b' or 'both'. Hiding one records a loss to the other.
+  // Hiding both records no head-to-head, since neither is better, and each
+  // still loses to a few past winners on the server.
   async function hide(side) {
     if (!current) return;
+    const pair = current;
+    current = null;
     try {
-      const opponent = current[side === 'a' ? 'b' : 'a'].id;
-      await api('/label/hide', { method: 'POST', body: JSON.stringify({ id: current[side].id, opponent }) });
-      status.textContent = `Hidden #${current[side].id}.`;
+      const targets = side === 'both'
+        ? [{ id: pair.a.id }, { id: pair.b.id }]
+        : [{ id: pair[side].id, opponent: pair[side === 'a' ? 'b' : 'a'].id }];
+      for (const body of targets) {
+        await api('/label/hide', { method: 'POST', body: JSON.stringify(body) });
+      }
+      status.textContent = `Hidden ${targets.map((target) => `#${target.id}`).join(' and ')}.`;
       await load();
     } catch (error) {
+      current = pair;
       status.textContent = `Could not hide: ${error.message}`;
     }
   }
@@ -187,8 +210,37 @@
       const result = await api('/label/train', { method: 'POST' });
       const eligible = Object.entries(result.eligible).map(([k, v]) => `${k} ${v}`).join(', ');
       status.textContent = `Trained on ${result.pairs} pairs. Eligible: ${eligible}.`;
+      await loadHistory();
     } catch (error) {
       status.textContent = `Training failed: ${error.message}`;
+    }
+  }
+
+  function percent(agreed, total) {
+    return total ? `${(100 * agreed / total).toFixed(1)}%` : '–';
+  }
+
+  async function loadHistory() {
+    try {
+      const runs = await api('/label/history.json');
+      const rows = runs.map((run) => {
+        const row = document.createElement('tr');
+        const cells = [
+          new Date(run.trained_at).toLocaleString(),
+          run.pairs,
+          percent(run.training_agreed, run.pairs),
+          run.validation_total ? `${percent(run.validation_agreed, run.validation_total)} of ${run.validation_total}` : '–',
+        ];
+        for (const value of cells) {
+          const cell = document.createElement('td');
+          cell.textContent = value;
+          row.append(cell);
+        }
+        return row;
+      });
+      document.querySelector('#history tbody').replaceChildren(...rows);
+    } catch {
+      // History is a nicety. The page works without it.
     }
   }
 
@@ -213,7 +265,8 @@
     else if (key === 'b' || key === 'arrowright') pick('b');
     else if (key === 's') load();
     else if (key === '1') hide('a');
-    else if (key === '2') hide('b');
+    else if (key === '2') hide('both');
+    else if (key === '3') hide('b');
   });
 
   // The species list comes from the server, so new species need no page change.
@@ -226,6 +279,7 @@
   }
 
   init();
+  loadHistory();
 </script>
 </body>
 </html>

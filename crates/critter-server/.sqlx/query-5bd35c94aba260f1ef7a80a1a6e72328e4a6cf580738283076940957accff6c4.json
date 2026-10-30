@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into training_runs (trained_at, pairs, training_agreed, validation_total, validation_agreed)\n         values ($1, $2, $3, $4, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5bd35c94aba260f1ef7a80a1a6e72328e4a6cf580738283076940957accff6c4"
+}

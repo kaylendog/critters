@@ -88,6 +88,7 @@ pub fn router(app: App) -> Router<App> {
         .route("/label/hide", post(hide))
         .route("/label/train", post(train))
         .route("/label/promote", post(promote))
+        .route("/label/history.json", get(history))
         .route("/label/ranking.json", get(ranking))
         .route_layer(middleware::from_fn_with_state(app, require_admin));
     Router::new().route("/label", get(page)).route("/label/ranking", get(ranking_page)).merge(api)
@@ -182,6 +183,11 @@ async fn record(
     .into_response())
 }
 
+/// `GET /label/history.json` - every retrain with its accuracy, newest first.
+async fn history(State(app): State<App>) -> Result<Json<Vec<db::TrainingRun>>, StatusCode> {
+    db::training_runs(&app.pool).await.map(Json).map_err(internal)
+}
+
 /// `POST /label/promote` - turn every validation pair into a training pair.
 async fn promote(State(app): State<App>) -> Result<Json<serde_json::Value>, StatusCode> {
     let promoted = db::promote_validation(&app.pool).await.map_err(internal)?;
@@ -189,7 +195,7 @@ async fn promote(State(app): State<App>) -> Result<Json<serde_json::Value>, Stat
 }
 
 async fn validation_stats(app: &App) -> Result<ValidationStats, StatusCode> {
-    let (total, agreed) = db::validation_stats(&app.pool).await.map_err(internal)?;
+    let (total, agreed) = db::agreement(&app.pool, true).await.map_err(internal)?;
     Ok(ValidationStats { total, agreed })
 }
 

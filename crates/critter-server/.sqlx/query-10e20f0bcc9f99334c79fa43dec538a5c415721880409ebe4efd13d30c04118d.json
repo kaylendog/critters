@@ -1,0 +1,74 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select trained_at, pairs, training_agreed, validation_total, validation_agreed\n         from training_runs order by trained_at desc",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "trained_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "training_runs",
+            "name": "trained_at"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "pairs",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "training_runs",
+            "name": "pairs"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "training_agreed",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "training_runs",
+            "name": "training_agreed"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "validation_total",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "training_runs",
+            "name": "validation_total"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "validation_agreed",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "training_runs",
+            "name": "validation_agreed"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "10e20f0bcc9f99334c79fa43dec538a5c415721880409ebe4efd13d30c04118d"
+}

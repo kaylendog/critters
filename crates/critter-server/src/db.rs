@@ -228,20 +228,58 @@ pub async fn pair_scores(
     Ok((row.winner, row.loser))
 }
 
-/// How many validation pairs exist and how many the current scores agree
-/// with.
-pub async fn validation_stats(pool: &PgPool) -> sqlx::Result<(i64, i64)> {
+/// How many validation pairs, or training pairs when `validation` is false,
+/// exist and how many the current scores agree with.
+pub async fn agreement(pool: &PgPool, validation: bool) -> sqlx::Result<(i64, i64)> {
     let row = sqlx::query!(
         r#"select count(*) as "total!",
                   count(*) filter (where w.score > l.score) as "agreed!"
            from pairs p
            join images w on w.id = p.winner_id
            join images l on l.id = p.loser_id
-           where p.validation"#
+           where p.validation = $1"#,
+        validation,
     )
     .fetch_one(pool)
     .await?;
     Ok((row.total, row.agreed))
+}
+
+/// One recorded retrain.
+#[derive(Debug, Serialize)]
+pub struct TrainingRun {
+    pub trained_at: DateTime<Utc>,
+    pub pairs: i32,
+    pub training_agreed: i32,
+    pub validation_total: i32,
+    pub validation_agreed: i32,
+}
+
+/// Record a retrain and the accuracy of the model it produced.
+pub async fn insert_training_run(pool: &PgPool, run: &TrainingRun) -> sqlx::Result<()> {
+    sqlx::query!(
+        "insert into training_runs (trained_at, pairs, training_agreed, validation_total, validation_agreed)
+         values ($1, $2, $3, $4, $5)",
+        run.trained_at,
+        run.pairs,
+        run.training_agreed,
+        run.validation_total,
+        run.validation_agreed,
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Every recorded retrain, newest first.
+pub async fn training_runs(pool: &PgPool) -> sqlx::Result<Vec<TrainingRun>> {
+    sqlx::query_as!(
+        TrainingRun,
+        "select trained_at, pairs, training_agreed, validation_total, validation_agreed
+         from training_runs order by trained_at desc",
+    )
+    .fetch_all(pool)
+    .await
 }
 
 /// Turn every validation pair into a training pair. Returns how many moved.

@@ -50,7 +50,29 @@ pub async fn retrain(app: &App) -> anyhow::Result<usize> {
     let weights = train(&pairs);
     db::save_model(&app.pool, &weights).await?;
     db::rescore(&app.pool).await?;
-    tracing::info!(pairs = pairs.len(), "ranker retrained");
+
+    // Score the new model on both sets and keep the result, so runs can be
+    // compared over time.
+    let (_, training_agreed) = db::agreement(&app.pool, false).await?;
+    let (validation_total, validation_agreed) = db::agreement(&app.pool, true).await?;
+    db::insert_training_run(
+        &app.pool,
+        &db::TrainingRun {
+            trained_at: chrono::Utc::now(),
+            pairs: pairs.len() as i32,
+            training_agreed: training_agreed as i32,
+            validation_total: validation_total as i32,
+            validation_agreed: validation_agreed as i32,
+        },
+    )
+    .await?;
+    tracing::info!(
+        pairs = pairs.len(),
+        training_agreed,
+        validation_total,
+        validation_agreed,
+        "ranker retrained"
+    );
     Ok(pairs.len())
 }
 
