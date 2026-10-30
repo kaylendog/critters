@@ -147,14 +147,22 @@ async fn run(app: &App, command: &CommandInteraction) -> anyhow::Result<Value> {
         ("now", Some(species)) => now(app, species).await,
         ("subscribe", Some(species)) => {
             let Some(cadence) = cadence else { return Ok(error("Pick a cadence.")) };
+            let post_at = post_at.unwrap_or(NaiveTime::MIN);
+            let timezone = timezone.unwrap_or(Tz::UTC);
+            // A daily time that already passed today starts tomorrow.
+            let missed = match cadence {
+                Cadence::Daily => push::due_day(Utc::now(), post_at, timezone, None),
+                Cadence::Hourly => None,
+            };
             let subscription = db::NewSubscription {
                 guild: guild.get() as i64,
                 channel: channel.get() as i64,
                 url: "",
                 species,
                 cadence,
-                post_at: post_at.unwrap_or(NaiveTime::MIN),
-                timezone: timezone.unwrap_or(Tz::UTC).name(),
+                post_at,
+                timezone: timezone.name(),
+                last_fired_slot: missed,
             };
             subscribe(app, channel, subscription).await
         }
@@ -164,16 +172,22 @@ async fn run(app: &App, command: &CommandInteraction) -> anyhow::Result<Value> {
             }
             let channel = channel.get() as i64;
             let timezone = timezone.map(|timezone| timezone.name());
-            Ok(
-                match db::configure(&app.pool, channel, species, cadence, post_at, timezone).await?
-                {
-                    Some(row) => success(format!(
-                        "Updated {species}. It now posts {}.",
-                        describe(&row.cadence, row.post_at, &row.timezone)
-                    )),
-                    None => error(format!("This channel does not get {species}.")),
-                },
-            )
+            let Some(row) =
+                db::configure(&app.pool, channel, species, cadence, post_at, timezone).await?
+            else {
+                return Ok(error(format!("This channel does not get {species}.")));
+            };
+            // Moving a daily time to one that already passed today must not
+            // post late. Mark today as done so it starts tomorrow.
+            if row.cadence == Cadence::Daily.as_str()
+                && let Ok(zone) = row.timezone.parse::<Tz>()
+                && let Some(slot) =
+                    push::due_day(Utc::now(), row.post_at, zone, row.last_fired_slot)
+            {
+                db::mark_fired(&app.pool, row.id, slot).await?;
+            }
+            let schedule = describe(&row.cadence, row.post_at, &row.timezone);
+            Ok(success(format!("Updated {species}. It now posts {schedule}.")))
         }
         ("unsubscribe", Some(species)) => unsubscribe(app, channel, species).await,
         ("trigger", Some(species)) => trigger(app, channel, species).await,

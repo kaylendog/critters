@@ -65,13 +65,17 @@ pub struct NewSubscription<'a> {
     pub cadence: Cadence,
     pub post_at: NaiveTime,
     pub timezone: &'a str,
+    /// Set to today's slot when today's post time has already passed, so a
+    /// new subscription does not post late.
+    pub last_fired_slot: Option<DateTime<Utc>>,
 }
 
 /// Subscribe a channel. Returns `false` if it already gets this species.
 pub async fn insert_webhook(pool: &PgPool, new: &NewSubscription<'_>) -> sqlx::Result<bool> {
     let result = sqlx::query!(
-        "insert into webhooks (id, guild_id, channel_id, url, species, cadence, post_at, timezone)
-         values ($1, $2, $3, $4, $5, $6, $7, $8)
+        "insert into webhooks (id, guild_id, channel_id, url, species, cadence, post_at, timezone,
+                               last_fired_slot)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          on conflict (channel_id, species) do nothing",
         Uuid::new_v4(),
         new.guild,
@@ -81,6 +85,7 @@ pub async fn insert_webhook(pool: &PgPool, new: &NewSubscription<'_>) -> sqlx::R
         new.cadence.as_str(),
         new.post_at,
         new.timezone,
+        new.last_fired_slot,
     )
     .execute(pool)
     .await?;
@@ -97,15 +102,15 @@ pub async fn configure(
     cadence: Option<Cadence>,
     post_at: Option<NaiveTime>,
     timezone: Option<&str>,
-) -> sqlx::Result<Option<Subscription>> {
+) -> sqlx::Result<Option<Webhook>> {
     sqlx::query_as!(
-        Subscription,
+        Webhook,
         "update webhooks
          set cadence = coalesce($3, cadence),
              post_at = coalesce($4, post_at),
              timezone = coalesce($5, timezone)
          where channel_id = $1 and species = $2
-         returning channel_id, species, cadence, post_at, timezone",
+         returning id, url, species, cadence, post_at, timezone, last_fired_slot",
         channel,
         species,
         cadence.map(Cadence::as_str),

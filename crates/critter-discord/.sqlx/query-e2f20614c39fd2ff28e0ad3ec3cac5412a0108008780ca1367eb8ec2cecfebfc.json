@@ -1,21 +1,32 @@
 {
   "db_name": "PostgreSQL",
-  "query": "update webhooks\n         set cadence = coalesce($3, cadence),\n             post_at = coalesce($4, post_at),\n             timezone = coalesce($5, timezone)\n         where channel_id = $1 and species = $2\n         returning channel_id, species, cadence, post_at, timezone",
+  "query": "update webhooks\n         set cadence = coalesce($3, cadence),\n             post_at = coalesce($4, post_at),\n             timezone = coalesce($5, timezone)\n         where channel_id = $1 and species = $2\n         returning id, url, species, cadence, post_at, timezone, last_fired_slot",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "channel_id",
-        "type_info": "Int8",
+        "name": "id",
+        "type_info": "Uuid",
         "origin": {
           "Table": {
             "table": "webhooks",
-            "name": "channel_id"
+            "name": "id"
           }
         }
       },
       {
         "ordinal": 1,
+        "name": "url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "webhooks",
+            "name": "url"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
         "name": "species",
         "type_info": "Text",
         "origin": {
@@ -26,7 +37,7 @@
         }
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "cadence",
         "type_info": "Text",
         "origin": {
@@ -37,7 +48,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "post_at",
         "type_info": "Time",
         "origin": {
@@ -48,13 +59,24 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "timezone",
         "type_info": "Text",
         "origin": {
           "Table": {
             "table": "webhooks",
             "name": "timezone"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "last_fired_slot",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "webhooks",
+            "name": "last_fired_slot"
           }
         }
       }
@@ -73,8 +95,10 @@
       false,
       false,
       false,
-      false
+      false,
+      false,
+      true
     ]
   },
-  "hash": "a945215d5938f280925b2f7d1853ef3212691c540edbab434b001749e23790e8"
+  "hash": "e2f20614c39fd2ff28e0ad3ec3cac5412a0108008780ca1367eb8ec2cecfebfc"
 }

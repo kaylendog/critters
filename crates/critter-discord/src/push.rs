@@ -88,7 +88,7 @@ async fn fire_due(app: &App) -> anyhow::Result<()> {
 
 /// The day slot a daily subscription should post now, if any. Today's local
 /// post time must have passed, and its UTC day must not have been posted yet.
-fn due_day(
+pub fn due_day(
     now: DateTime<Utc>,
     post_at: NaiveTime,
     timezone: Tz,
