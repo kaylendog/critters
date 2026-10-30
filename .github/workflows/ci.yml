@@ -21,7 +21,7 @@ env:
 
 jobs:
   lint:
-    name: ci-${{ matrix.crate }} - Lint
+    name: Lint - critter-${{ matrix.crate }}
     runs-on: ubuntu-latest
     permissions:
       contents: read # checkout
@@ -47,7 +47,7 @@ jobs:
           CRATE: ${{ matrix.crate }}
 
   check:
-    name: ci-${{ matrix.crate }} - Check
+    name: Check - critter-${{ matrix.crate }}
     runs-on: ubuntu-latest
     permissions:
       contents: read # checkout

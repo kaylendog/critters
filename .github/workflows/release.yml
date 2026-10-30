@@ -1,0 +1,50 @@
+name: Release
+
+# Pushing a tag like `v1.2.3` publishes images tagged `1.2.3`, `1.2` and
+# `latest`, then creates a GitHub release. Tags with a suffix, like
+# `v1.2.3-rc.1`, make a prerelease and leave `latest` alone.
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+# Never cancel a release halfway through.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  images:
+    # `./` is GitHub's documented form for reusable workflows, and runs this
+    # same commit. zizmor's `$/` form is only documented for actions.
+    uses: ./.github/workflows/docker.yml # zizmor: ignore[self-repository]
+    permissions:
+      contents: read # checkout
+      packages: write # push to ghcr.io
+
+  release:
+    name: create release
+    needs: images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release
+    steps:
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          prerelease=()
+          [[ "$version" == *-* ]] && prerelease=(--prerelease)
+          notes="Images:
+
+          - \`ghcr.io/${GITHUB_REPOSITORY}/critter-server:${version}\`
+          - \`ghcr.io/${GITHUB_REPOSITORY}/critter-discord:${version}\`"
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --generate-notes \
+            --notes "$notes" \
+            "${prerelease[@]}"
