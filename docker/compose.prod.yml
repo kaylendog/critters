@@ -1,0 +1,39 @@
+# Production, from the published images:
+#   docker compose -f docker/compose.prod.yml up -d
+# Settings come from `docker/.env`. POSTGRES_PASSWORD and the DISCORD_*
+# values are required.
+#
+# Nothing is published beyond this host. Put a reverse proxy with HTTPS in
+# front of 8081 for Discord. Reach the label page on 8080 over an SSH tunnel
+# or a private network, never the open internet.
+name: critters
+
+services:
+  postgres:
+    extends: { file: common.yml, service: postgres }
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in docker/.env}
+
+  server:
+    extends: { file: common.yml, service: server }
+    image: ghcr.io/kaylendog/critters/critter-server:${CRITTERS_VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  discord:
+    extends: { file: common.yml, service: discord }
+    image: ghcr.io/kaylendog/critters/critter-discord:${CRITTERS_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      PUBLIC_URL: ${DISCORD_PUBLIC_URL:?set DISCORD_PUBLIC_URL in docker/.env}
+      DISCORD_APPLICATION_ID: ${DISCORD_APPLICATION_ID:?set DISCORD_APPLICATION_ID in docker/.env}
+      DISCORD_PUBLIC_KEY: ${DISCORD_PUBLIC_KEY:?set DISCORD_PUBLIC_KEY in docker/.env}
+      DISCORD_TOKEN: ${DISCORD_TOKEN:?set DISCORD_TOKEN in docker/.env}
+    ports:
+      - "127.0.0.1:8081:8081"
+
+volumes:
+  pgdata:
+  appdata:

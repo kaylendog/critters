@@ -1,0 +1,36 @@
+# Development. Postgres only by default:
+#   docker compose -f docker/compose.dev.yml up -d
+# Then run the binaries with `cargo run -p critter-server` and
+# `cargo run -p critter-discord`. To build and run everything in Docker:
+#   docker compose -f docker/compose.dev.yml --profile app up --build
+name: critters-dev
+
+services:
+  postgres:
+    extends: { file: common.yml, service: postgres }
+    ports:
+      - "5432:5432"
+
+  server:
+    extends: { file: common.yml, service: server }
+    profiles: [app]
+    build:
+      context: ..
+      args:
+        BIN: critter-server
+    ports:
+      - "8080:8080"
+
+  discord:
+    extends: { file: common.yml, service: discord }
+    profiles: [app]
+    build:
+      context: ..
+      args:
+        BIN: critter-discord
+    ports:
+      - "8081:8081"
+
+volumes:
+  pgdata:
+  appdata:

@@ -34,22 +34,32 @@ Each binary has its own Postgres database.
 
 ## Running it
 
-With Docker:
+Compose files live in `docker/`. `common.yml` holds what both setups share.
+
+| File | Use |
+| --- | --- |
+| `compose.prod.yml` | Published images, restart on failure, ports bound to localhost only. |
+| `compose.dev.yml` | Postgres on 5432, plus the binaries built from source behind the `app` profile. |
+
+In production:
 
 ```sh
-docker compose --profile app up -d --build
-docker compose --profile app run --rm server seed
+cp docker/.env.example docker/.env   # then fill it in
+docker compose -f docker/compose.prod.yml up -d
+docker compose -f docker/compose.prod.yml run --rm server seed
 ```
 
 The server prints a random admin token on start unless `SERVER_ADMIN_TOKEN` is
-set. Open <http://localhost:8080/label>, paste the token, and start comparing.
-Press Train after a hundred or so pairs. The Discord bot needs its own setup,
-described in its [README](crates/critter-discord/README.md).
+set. Open <http://localhost:8080/label> on the host, or through an SSH tunnel,
+paste the token, and start comparing. Press Train after a hundred or so pairs.
+Discord must reach the bot on 8081 over public HTTPS, so put a reverse proxy in
+front of it. The bot's own setup is in its
+[README](crates/critter-discord/README.md).
 
 For development, run only Postgres in Docker and the binaries with Cargo:
 
 ```sh
-docker compose up -d
+docker compose -f docker/compose.dev.yml up -d
 cp crates/critter-server/.env.example crates/critter-server/.env
 cargo run -p critter-server -- seed
 cargo run -p critter-server
