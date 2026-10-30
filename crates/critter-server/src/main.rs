@@ -93,6 +93,9 @@ enum Command {
     Seed {
         #[arg(long)]
         per_species: Option<usize>,
+        /// Only these species, comma-separated. Defaults to all.
+        #[arg(long, value_delimiter = ',')]
+        species: Vec<String>,
     },
     /// Retrain the ranker from stored pairs and rescore every image.
     Train,
@@ -137,13 +140,23 @@ async fn main() -> anyhow::Result<()> {
     sqlx::migrate!().run(&pool).await?;
 
     // Prepare the HTTP client and application state.
-    let http = reqwest::Client::builder().user_agent(&args.config.user_agent).build()?;
+    // A hung upstream must not stall ingest. Connect and read timeouts catch
+    // hangs without capping how long a healthy large download may take.
+    let http = reqwest::Client::builder()
+        .user_agent(&args.config.user_agent)
+        .connect_timeout(Duration::from_secs(5))
+        .read_timeout(Duration::from_secs(5))
+        .build()?;
     let app = App { pool, config: Arc::new(args.config), http };
 
     match args.command.unwrap_or(Command::Serve) {
         Command::Serve => serve(app).await,
-        Command::Seed { per_species } => {
-            sources::ingest(&app, per_species.unwrap_or(app.config.seed_per_species)).await
+        Command::Seed { per_species, species } => {
+            if let Some(unknown) = species.iter().find(|slug| sources::species(slug).is_none()) {
+                anyhow::bail!("unknown species {unknown:?}");
+            }
+            sources::ingest(&app, per_species.unwrap_or(app.config.seed_per_species), &species)
+                .await
         }
         Command::Train => {
             let pairs = ml::rank::retrain(&app).await?;
@@ -203,7 +216,7 @@ async fn ingest_loop(app: App) {
         tokio::time::sleep(interval).await;
     }
     loop {
-        if let Err(error) = sources::ingest(&app, app.config.seed_per_species).await {
+        if let Err(error) = sources::ingest(&app, app.config.seed_per_species, &[]).await {
             tracing::error!(%error, "ingest failed");
         }
         tokio::time::sleep(interval).await;

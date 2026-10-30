@@ -94,6 +94,26 @@ pub const SPECIES: &[Species] = &[
         openverse_query: Some("deer"),
         inat_taxon: Some(42158),
     },
+    Species {
+        slug: "bearded-dragon",
+        // The whole genus, so pet species other than the central bearded dragon
+        // count too.
+        commons_query: r#"deepcategory:"Pogona""#,
+        openverse_query: Some("bearded dragon"),
+        inat_taxon: Some(31410),
+    },
+    Species {
+        slug: "leopard-gecko",
+        commons_query: r#"deepcategory:"Eublepharis macularius""#,
+        openverse_query: Some("leopard gecko"),
+        inat_taxon: Some(34675),
+    },
+    Species {
+        slug: "crested-gecko",
+        commons_query: r#"deepcategory:"Correlophus ciliatus""#,
+        openverse_query: Some("crested gecko"),
+        inat_taxon: Some(200209),
+    },
 ];
 
 /// Look up a species by its URL slug.
@@ -119,16 +139,21 @@ pub fn allowed(code: &str, allowlist: &[String]) -> bool {
     allowlist.iter().any(|allowed| allowed.eq_ignore_ascii_case(family(code)))
 }
 
-/// Fetch candidates from every source for every species and insert the ones
-/// with an allowed licence. Images already present are left untouched.
-pub async fn ingest(app: &App, per_species: usize) -> anyhow::Result<()> {
+/// Fetch candidates from every source for the given species, or all species
+/// when `only` is empty, and insert the ones with an allowed licence. Images
+/// already present are left untouched.
+pub async fn ingest(app: &App, per_species: usize, only: &[String]) -> anyhow::Result<()> {
     let allowlist: Vec<String> = app
         .config
         .licenses
         .clone()
         .unwrap_or_else(|| DEFAULT_LICENSES.iter().map(ToString::to_string).collect());
 
-    for species in SPECIES {
+    let selected = SPECIES
+        .iter()
+        .filter(|species| only.is_empty() || only.iter().any(|slug| slug == species.slug));
+    for species in selected {
+        tracing::info!(species = species.slug, "fetching");
         // Gather from each source independently, so one source failing does not
         // block the other.
         let mut candidates = Vec::new();

@@ -2,7 +2,7 @@ mod admin;
 mod db;
 mod push;
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::Context;
 use axum::{
@@ -103,7 +103,11 @@ async fn main() -> anyhow::Result<()> {
     sqlx::migrate!().run(&pool).await?;
 
     // Prepare the HTTP clients and application state.
-    let http = reqwest::Client::builder().user_agent(&args.config.user_agent).build()?;
+    let http = reqwest::Client::builder()
+        .user_agent(&args.config.user_agent)
+        .connect_timeout(Duration::from_secs(5))
+        .read_timeout(Duration::from_secs(5))
+        .build()?;
     let app = App {
         pool,
         config: Arc::new(args.config),

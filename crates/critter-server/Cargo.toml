@@ -30,3 +30,7 @@ candle-transformers = "0.11"
 image = "0.25"
 
 critter-types.workspace = true
+
+[features]
+# Run CLIP on the GPU via Metal. macOS only. Build with `--features metal`.
+metal = ["candle-core/metal", "candle-nn/metal", "candle-transformers/metal"]

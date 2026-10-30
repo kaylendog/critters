@@ -11,7 +11,7 @@ use candle_transformers::models::clip::{
     vision_model::{ClipVisionConfig, ClipVisionTransformer},
 };
 use image::{GenericImageView, imageops::FilterType};
-use tokio::sync::OnceCell;
+use tokio::{sync::OnceCell, task::JoinSet};
 
 use crate::{App, Config, db};
 
@@ -27,19 +27,34 @@ const MEAN: [f32; 3] = [0.481_454_66, 0.457_827_5, 0.408_210_73];
 const STD: [f32; 3] = [0.268_629_54, 0.261_302_6, 0.275_777_1];
 /// How many unembedded images one pass handles.
 const BATCH: i64 = 10_000;
+/// Images per forward pass, and downloads in flight at once.
+const BATCH_SIZE: usize = 16;
 
 /// The loaded vision tower.
 pub struct Clip {
     vision: ClipVisionTransformer,
     projection: Linear,
+    device: Device,
+}
+
+/// The GPU when built with the `metal` feature, otherwise the CPU.
+fn device() -> Device {
+    #[cfg(feature = "metal")]
+    match Device::new_metal(0) {
+        Ok(device) => return device,
+        Err(error) => tracing::warn!(%error, "metal unavailable, falling back to CPU"),
+    }
+    Device::Cpu
 }
 
 impl Clip {
     /// Memory-map the weights and build the vision tower.
     fn load(path: &std::path::Path) -> anyhow::Result<Self> {
+        let device = device();
+        tracing::info!(?device, "loading CLIP");
         // SAFETY: the file is only written by `download` and is never modified
         // while mapped.
-        let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[path], DType::F32, &Device::Cpu)? };
+        let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[path], DType::F32, &device)? };
         let config = ClipVisionConfig::vit_base_patch32();
         let vision = ClipVisionTransformer::new(vb.pp("vision_model"), &config)?;
         let projection = candle_nn::linear_no_bias(
@@ -47,14 +62,18 @@ impl Clip {
             config.projection_dim,
             vb.pp("visual_projection"),
         )?;
-        Ok(Clip { vision, projection })
+        Ok(Clip { vision, projection, device })
     }
 
-    /// Embed one encoded image. Blocking and CPU-bound.
-    pub fn embed(&self, bytes: &[u8]) -> anyhow::Result<Vec<f32>> {
-        let pixels = preprocess(bytes)?;
-        let features = self.vision.forward(&pixels)?.apply(&self.projection)?;
-        Ok(div_l2_norm(&features)?.squeeze(0)?.to_vec1()?)
+    /// Embed a batch of preprocessed images in one forward pass. Blocking.
+    /// Returns one unit vector per input, in order.
+    pub fn embed_many(&self, pixels: &[Tensor]) -> anyhow::Result<Vec<Vec<f32>>> {
+        if pixels.is_empty() {
+            return Ok(Vec::new());
+        }
+        let batch = Tensor::cat(pixels, 0)?.to_device(&self.device)?;
+        let features = self.vision.forward(&batch)?.apply(&self.projection)?;
+        Ok(div_l2_norm(&features)?.to_vec2()?)
     }
 }
 
@@ -133,29 +152,50 @@ pub async fn embed_pending(app: &App) -> anyhow::Result<usize> {
     let clip = model(app).await?;
     tracing::info!(count = pending.len(), "embedding images");
 
-    // ponytail: sequential. Each image is a download plus roughly 100 ms of
-    // CPU. Parallelise the downloads if seeding ever feels slow.
     let mut done = 0;
-    for (id, url) in pending {
-        let bytes = match app.http.get(&url).send().await.and_then(|r| r.error_for_status()) {
-            Ok(response) => response.bytes().await?,
-            Err(error) => {
-                tracing::warn!(id, %error, "could not fetch image");
-                continue;
+    for chunk in pending.chunks(BATCH_SIZE) {
+        // Download the whole batch concurrently.
+        let mut downloads = JoinSet::new();
+        for (id, url) in chunk {
+            let (id, url, http) = (*id, url.clone(), app.http.clone());
+            downloads.spawn(async move {
+                let bytes =
+                    async { http.get(&url).send().await?.error_for_status()?.bytes().await };
+                (id, bytes.await)
+            });
+        }
+        let mut downloaded = Vec::with_capacity(chunk.len());
+        while let Some(result) = downloads.join_next().await {
+            match result? {
+                (id, Ok(bytes)) => downloaded.push((id, bytes)),
+                (id, Err(error)) => tracing::warn!(id, %error, "could not fetch image"),
             }
-        };
+        }
+
+        // Decode on the CPU and run one forward pass for the batch.
         let clip = clip.clone();
-        match tokio::task::spawn_blocking(move || clip.embed(&bytes)).await? {
-            Ok(embedding) => db::set_embedding(&app.pool, id, &embedding).await?,
-            Err(error) => {
-                tracing::warn!(id, %error, "could not embed image");
-                continue;
+        let embedded = tokio::task::spawn_blocking(move || {
+            let mut ids = Vec::with_capacity(downloaded.len());
+            let mut tensors = Vec::with_capacity(downloaded.len());
+            for (id, bytes) in &downloaded {
+                match preprocess(bytes) {
+                    Ok(tensor) => {
+                        ids.push(*id);
+                        tensors.push(tensor);
+                    }
+                    Err(error) => tracing::warn!(id, %error, "could not decode image"),
+                }
             }
+            let vectors = clip.embed_many(&tensors)?;
+            anyhow::Ok(ids.into_iter().zip(vectors).collect::<Vec<_>>())
+        })
+        .await??;
+
+        for (id, embedding) in embedded {
+            db::set_embedding(&app.pool, id, &embedding).await?;
+            done += 1;
         }
-        done += 1;
-        if done % 50 == 0 {
-            tracing::info!(done, "embedding images");
-        }
+        tracing::info!(done, "embedding images");
     }
     Ok(done)
 }

@@ -5,7 +5,18 @@ use chrono::{DateTime, DurationRound, TimeDelta, Utc};
 use serde::{Deserialize, Serialize};
 
 /// URL slugs of every species the server serves.
-pub const SPECIES: &[&str] = &["wolf", "coyote", "fox", "bernese", "hyena", "wild-dog", "deer"];
+pub const SPECIES: &[&str] = &[
+    "wolf",
+    "coyote",
+    "fox",
+    "bernese",
+    "hyena",
+    "wild-dog",
+    "deer",
+    "bearded-dragon",
+    "leopard-gecko",
+    "crested-gecko",
+];
 
 /// Granularity of a slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
