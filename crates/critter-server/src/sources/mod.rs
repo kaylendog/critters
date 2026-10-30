@@ -130,6 +130,12 @@ mod tests {
     use super::*;
 
     #[test]
+    fn slugs_match_shared_types() {
+        let slugs: Vec<_> = SPECIES.iter().map(|species| species.slug).collect();
+        assert_eq!(slugs, critter_types::SPECIES);
+    }
+
+    #[test]
     fn family_strips_version_only() {
         assert_eq!(family("CC-BY-SA-4.0"), "CC-BY-SA");
         assert_eq!(family("CC0-1.0"), "CC0");

@@ -9,7 +9,7 @@ use axum::{
     routing::get,
 };
 use chrono::{DateTime, NaiveDate, Utc};
-use serde::Serialize;
+use critter_types::{Kind, Photo};
 use sqlx::PgPool;
 
 use crate::{
@@ -17,58 +17,21 @@ use crate::{
     sources::{self, Species},
 };
 
-/// Granularity of a slot.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Kind {
-    Hour,
-    Day,
-}
-
-impl Kind {
-    /// The value stored in `slots.kind`.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Kind::Hour => "hour",
-            Kind::Day => "day",
-        }
-    }
-}
-
-/// The JSON payload for a slot.
-#[derive(Debug, Serialize)]
-pub struct Photo {
-    pub species: String,
-    pub kind: Kind,
-    /// Start of the slot, UTC.
-    pub slot: DateTime<Utc>,
-    pub image_url: String,
-    pub source_url: String,
-    pub source: String,
-    pub author: Option<String>,
-    pub author_url: Option<String>,
-    pub license: String,
-    pub license_url: Option<String>,
-    pub width: Option<i32>,
-    pub height: Option<i32>,
-}
-
-impl Photo {
-    fn from_image(image: db::Image, kind: Kind, slot: DateTime<Utc>) -> Self {
-        Photo {
-            species: image.species,
-            kind,
-            slot,
-            image_url: image.image_url,
-            source_url: image.source_url,
-            source: image.source,
-            author: image.author,
-            author_url: image.author_url,
-            license: image.license,
-            license_url: image.license_url,
-            width: image.width,
-            height: image.height,
-        }
+/// Build the slot payload from an image row.
+fn photo(image: db::Image, kind: Kind, slot: DateTime<Utc>) -> Photo {
+    Photo {
+        species: image.species,
+        kind,
+        slot,
+        image_url: image.image_url,
+        source_url: image.source_url,
+        source: image.source,
+        author: image.author,
+        author_url: image.author_url,
+        license: image.license,
+        license_url: image.license_url,
+        width: image.width,
+        height: image.height,
     }
 }
 
@@ -87,18 +50,23 @@ type DayPath = Path<(String, i32, u32, u32)>;
 /// Path parameters for an hourly slot.
 type HourPath = Path<(String, i32, u32, u32, u32)>;
 
+/// `GET /{species}/{year}/{month}/{day}` - the day's photo as JSON.
 async fn day(State(app): State<App>, Path((species, y, m, d)): DayPath) -> Response {
     lookup(&app, &species, y, m, d, None).await.map(Json)
 }
 
+/// `GET /{species}/{year}/{month}/{day}/image` - redirect to the day's picture.
 async fn day_image(State(app): State<App>, Path((species, y, m, d)): DayPath) -> ImageResponse {
     lookup(&app, &species, y, m, d, None).await.map(|photo| Redirect::temporary(&photo.image_url))
 }
 
+/// `GET /{species}/{year}/{month}/{day}/{hour}` - the hour's photo as JSON.
 async fn hour(State(app): State<App>, Path((species, y, m, d, h)): HourPath) -> Response {
     lookup(&app, &species, y, m, d, Some(h)).await.map(Json)
 }
 
+/// `GET /{species}/{year}/{month}/{day}/{hour}/image` - redirect to the hour's
+/// picture.
 async fn hour_image(
     State(app): State<App>,
     Path((species, y, m, d, h)): HourPath,
@@ -163,7 +131,7 @@ pub async fn pick_for_slot(
     starts_at: DateTime<Utc>,
 ) -> anyhow::Result<Option<Photo>> {
     if let Some(image) = db::slot_image(pool, species.slug, kind.as_str(), starts_at).await? {
-        return Ok(Some(Photo::from_image(image, kind, starts_at)));
+        return Ok(Some(photo(image, kind, starts_at)));
     }
 
     // Pick by hashing the slot, so the same slot picks the same image even if
@@ -180,7 +148,7 @@ pub async fn pick_for_slot(
     let image = db::slot_image(pool, species.slug, kind.as_str(), starts_at)
         .await?
         .ok_or_else(|| anyhow::anyhow!("slot vanished after pinning"))?;
-    Ok(Some(Photo::from_image(image, kind, starts_at)))
+    Ok(Some(photo(image, kind, starts_at)))
 }
 
 /// 64-bit FNV-1a. Stable across Rust versions, unlike `DefaultHasher`.

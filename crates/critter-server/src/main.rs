@@ -30,8 +30,8 @@ pub struct Config {
     /// Postgres connection string, e.g. `postgres://user:pass@host/dbname`.
     #[arg(long, env)]
     pub database_url: String,
-    /// Bearer token for `/label` and `/webhooks`. If unset, this is generated
-    /// and logged on start.
+    /// Bearer token for `/label`. If unset, this is generated and logged on
+    /// start.
     #[arg(long, env)]
     pub admin_token: Option<String>,
     /// Address to bind the HTTP server to.
@@ -64,7 +64,7 @@ pub struct Config {
     #[arg(
         long,
         env,
-        default_value = "daily-critters (https://github.com/kaylendog/daily-critters)"
+        default_value = "critter-server (https://github.com/kaylendog/daily-critters)"
     )]
     pub user_agent: String,
 }
@@ -72,7 +72,7 @@ pub struct Config {
 /// An enumeration of subcommands supported by the service.
 #[derive(Subcommand)]
 enum Command {
-    /// Run the HTTP API, ingest timer and webhook scheduler (default).
+    /// Run the HTTP API and the ingest timer (default).
     Serve,
     /// Fetch candidate images once and exit.
     Seed {
@@ -100,12 +100,12 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "daily_critters=info,tower_http=info".into()),
+                .unwrap_or_else(|_| "critter_server=info,tower_http=info".into()),
         )
         .init();
 
-    // Load `.env` for local development. A missing file is fine.
-    dotenvy::dotenv().ok();
+    // Load this crate's `.env` for local development. A missing file is fine.
+    dotenvy::from_path(concat!(env!("CARGO_MANIFEST_DIR"), "/.env")).ok();
     let mut args = Args::parse();
 
     // If the admin token is not set, generate a random one and log it.
@@ -134,7 +134,7 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
-/// Serve the HTTP API and run the ingest timer and webhook scheduler.
+/// Serve the HTTP API and run the ingest timer.
 async fn serve(app: App) -> anyhow::Result<()> {
     tokio::spawn(ingest_loop(app.clone()));
 

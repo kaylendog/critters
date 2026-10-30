@@ -1,6 +1,7 @@
 //! Postgres queries. Everything that touches the schema lives here. Queries
 //! are checked at compile time against `DATABASE_URL`, or against `.sqlx/`
-//! when `SQLX_OFFLINE=true`. Run `cargo sqlx prepare` after changing one.
+//! when `SQLX_OFFLINE=true`. Run `cargo sqlx prepare` from this crate's
+//! directory after changing one.
 
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
