@@ -123,14 +123,16 @@ fn photo_url(server_url: &str, species: &str, kind: Kind, slot: DateTime<Utc>) -
 
 /// Execute the webhook. Serenity has no Components V2 types yet, so this is a
 /// plain request. Webhooks drop `components` without `with_components`.
-async fn post(app: &App, url: &str, photo: &Photo) -> reqwest::Result<()> {
+/// Errors carry no URL, since the URL holds the webhook's token.
+pub async fn post(app: &App, url: &str, photo: &Photo) -> reqwest::Result<()> {
     app.http
         .post(url)
         .query(&[("with_components", "true")])
         .json(&message(photo, 0))
         .send()
-        .await?
-        .error_for_status()?;
+        .await
+        .and_then(reqwest::Response::error_for_status)
+        .map_err(reqwest::Error::without_url)?;
     Ok(())
 }
 

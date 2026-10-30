@@ -17,6 +17,7 @@ admins can change this under Server Settings, Integrations.
 | `/configure species [cadence] [time] [timezone]` | Change a subscription. Options you leave out are kept. |
 | `/unsubscribe species` | Stop. |
 | `/list` | Every subscription in this server. |
+| `/trigger species` | Post this channel's subscription now, for testing. The scheduled post still goes out. |
 
 A channel can have one subscription per species. They share one webhook, which is
 removed with the last subscription. If the webhook is deleted or the bot is

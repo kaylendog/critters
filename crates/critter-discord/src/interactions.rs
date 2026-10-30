@@ -70,6 +70,8 @@ fn commands() -> Vec<CreateCommand> {
             .add_option(timezone),
         manage("unsubscribe", "Stop posting a critter here").add_option(species_option()),
         manage("list", "List this server's critter subscriptions"),
+        manage("trigger", "Post a subscription's current photo here now, for testing")
+            .add_option(species_option()),
     ]
 }
 
@@ -174,6 +176,7 @@ async fn run(app: &App, command: &CommandInteraction) -> anyhow::Result<Value> {
             )
         }
         ("unsubscribe", Some(species)) => unsubscribe(app, channel, species).await,
+        ("trigger", Some(species)) => trigger(app, channel, species).await,
         _ => Ok(error("Unknown command.")),
     }
 }
@@ -284,6 +287,33 @@ async fn unsubscribe(app: &App, channel: ChannelId, species: &str) -> anyhow::Re
         tracing::warn!(error = %failure, "could not delete webhook");
     }
     Ok(success(format!("Unsubscribed from {species}.")))
+}
+
+/// Post the current slot of a subscription's cadence through its webhook now.
+/// The post is not recorded, so the scheduled one still goes out.
+async fn trigger(app: &App, channel: ChannelId, species: &str) -> anyhow::Result<Value> {
+    let Some(webhook) = db::subscription(&app.pool, channel.get() as i64, species).await? else {
+        return Ok(error(format!("This channel does not get {species}.")));
+    };
+    let Some(cadence) = Cadence::parse(&webhook.cadence) else {
+        anyhow::bail!("subscription {} has cadence {:?}", webhook.id, webhook.cadence);
+    };
+    let kind = cadence.kind();
+    let photo = match push::fetch_photo(app, species, kind, kind.slot_containing(Utc::now())).await
+    {
+        Ok(photo) => photo,
+        Err(failure) => {
+            tracing::warn!(error = %failure, "could not fetch photo");
+            return Ok(error("No photo is available right now. Try again later."));
+        }
+    };
+    Ok(match push::post(app, &webhook.url, &photo).await {
+        Ok(()) => success(format!("Posted the current {species} photo.")),
+        Err(failure) => {
+            tracing::warn!(error = %failure, "triggered post failed");
+            error(format!("Discord rejected the post: {failure}"))
+        }
+    })
 }
 
 /// Every subscription in the server, by channel.

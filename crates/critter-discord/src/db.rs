@@ -149,6 +149,23 @@ pub async fn webhook_in_use(pool: &PgPool, url: &str) -> sqlx::Result<bool> {
     .await
 }
 
+/// A channel's subscription to a species, if it has one.
+pub async fn subscription(
+    pool: &PgPool,
+    channel: i64,
+    species: &str,
+) -> sqlx::Result<Option<Webhook>> {
+    sqlx::query_as!(
+        Webhook,
+        "select id, url, species, cadence, post_at, timezone, last_fired_slot
+         from webhooks where channel_id = $1 and species = $2",
+        channel,
+        species,
+    )
+    .fetch_optional(pool)
+    .await
+}
+
 /// Drop every subscription that posts through a webhook.
 pub async fn delete_webhook_url(pool: &PgPool, url: &str) -> sqlx::Result<()> {
     sqlx::query!("delete from webhooks where url = $1", url).execute(pool).await?;
