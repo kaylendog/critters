@@ -1,5 +1,7 @@
-# Builds one binary from the workspace. Pass `--build-arg BIN=critter-discord`
-# for the pusher. The default is the server.
+# Builds one binary from the workspace. The target picks the final image and
+# BIN picks the binary, and they must match:
+#   docker build --target critter-discord --build-arg BIN=critter-discord .
+# The default is the server.
 ARG BIN=critter-server
 
 FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
@@ -23,7 +25,17 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/entrypoint /usr/local/bin/entrypoint
+ENTRYPOINT ["entrypoint"]
+
+FROM runtime AS critter-discord
+EXPOSE 8081
+
+# Last, so it is the default target.
+FROM runtime AS critter-server
+# The labels and model this image was built with. Synced into the database on
+# every start. Set IMPORT_FILE empty to label on the deployment instead.
+COPY weights.json /usr/share/critters/weights.json
+ENV IMPORT_FILE=/usr/share/critters/weights.json
 VOLUME /data
 ENV DATA_DIR=/data
-EXPOSE 8080 8081
-ENTRYPOINT ["entrypoint"]
+EXPOSE 8080

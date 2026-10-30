@@ -16,8 +16,13 @@ services:
     profiles: [app]
     build:
       context: ..
+      target: critter-server
       args:
         BIN: critter-server
+    environment:
+      # Development is where labelling happens, so do not overwrite labels
+      # with the baked-in `weights.json` on every start.
+      IMPORT_FILE: ""
     ports:
       - "8080:8080"
 
@@ -26,6 +31,7 @@ services:
     profiles: [app]
     build:
       context: ..
+      target: critter-discord
       args:
         BIN: critter-discord
     ports:

@@ -67,16 +67,24 @@ cargo run -p critter-server
 
 ## Moving your model
 
-Labels and weights live in the server's database. To take them to a new
-deployment:
+Labels and weights live in the server's database. `weights.json` in this repo
+is an export of them, and the server image is built with it. On every start the
+image syncs it into the database: its labels and model replace the database's,
+and its hides are added. So the usual flow is to label locally, then:
+
+```sh
+critter-server export weights.json   # commit it, and CI builds a new image
+```
+
+To label on a deployment instead, set `IMPORT_FILE` to empty there, or the next
+restart overwrites its labels. To move labels by hand:
 
 ```sh
 critter-server export critters.json   # on the old one
 critter-server import critters.json   # on the new one, before any labelling
 ```
 
-The import brings in every labelled image, so it works on an unseeded
-database.
+Either way brings in every labelled image, so it works on an unseeded database.
 
 ## Licence
 

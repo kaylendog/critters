@@ -78,6 +78,13 @@ pub struct Config {
     /// details here. Defaults to the project name and a link to the source.
     #[arg(long, env, default_value = "critter-server (https://github.com/kaylendog/critters)")]
     pub user_agent: String,
+    /// A file from `export` to sync from on every start of `serve`. Its
+    /// labels and model replace the database's, and hides are added. The
+    /// Docker image points this at the `weights.json` it was built with. Set
+    /// it empty to label on this deployment instead. A string rather than a
+    /// path, since clap rejects empty paths.
+    #[arg(long, env)]
+    pub import_file: Option<String>,
 }
 
 /// An enumeration of subcommands supported by the service.
@@ -171,7 +178,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Import { path } => {
             let json = std::fs::read_to_string(&path)?;
-            let (images, pairs) = db::import(&app.pool, &json).await?;
+            let (images, pairs) = db::import(&app.pool, &json, false).await?;
             println!("imported {pairs} pairs and {images} new images");
             // Embed everything new, then score it with the imported model.
             ml::embed::embed_pending(&app).await?;
@@ -183,6 +190,32 @@ async fn main() -> anyhow::Result<()> {
 
 /// Serve the HTTP API and run the ingest timer.
 async fn serve(app: App) -> anyhow::Result<()> {
+    // Sync before serving, so no slot is picked with stale scores. A missing
+    // or broken file stops startup rather than serving the wrong model.
+    if let Some(path) = app.config.import_file.as_deref().filter(|path| !path.is_empty()) {
+        let json =
+            std::fs::read_to_string(path).with_context(|| format!("reading IMPORT_FILE {path}"))?;
+        let (images, pairs) = db::import(&app.pool, &json, true).await?;
+        db::rescore(&app.pool).await?;
+        tracing::info!(path, pairs, images, "synced labels and model");
+        // New images need embedding before they can be scored. That can take
+        // minutes, so do it without holding up the API.
+        if images > 0 {
+            let app = app.clone();
+            tokio::spawn(async move {
+                let result = async {
+                    ml::embed::embed_pending(&app).await?;
+                    db::rescore(&app.pool).await?;
+                    anyhow::Ok(())
+                }
+                .await;
+                if let Err(error) = result {
+                    tracing::error!(%error, "embedding imported images failed");
+                }
+            });
+        }
+    }
+
     tokio::spawn(ingest_loop(app.clone()));
 
     // Setup the HTTP router and start listening for requests.

@@ -393,11 +393,16 @@ pub async fn export(pool: &PgPool) -> sqlx::Result<String> {
 }
 
 /// Load a file written by [`export`]. Images are inserted if missing, and
-/// marked hidden if hidden in either place. Refuses a database that already
-/// has pairs, since importing twice would count every verdict twice. Returns
-/// `(new images, pairs)`.
-pub async fn import(pool: &PgPool, json: &str) -> anyhow::Result<(u64, u64)> {
+/// marked hidden if hidden in either place. Returns `(new images, pairs)`.
+///
+/// Without `replace`, a database that already has pairs is refused, since
+/// importing twice would count every verdict twice. With `replace`, existing
+/// pairs are dropped first, so the file becomes the only source of labels.
+pub async fn import(pool: &PgPool, json: &str, replace: bool) -> anyhow::Result<(u64, u64)> {
     let mut tx = pool.begin().await?;
+    if replace {
+        sqlx::query!("delete from pairs").execute(&mut *tx).await?;
+    }
     let existing = sqlx::query_scalar!(r#"select count(*) as "count!" from pairs"#)
         .fetch_one(&mut *tx)
         .await?;
