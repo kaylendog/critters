@@ -82,17 +82,22 @@ pub struct LabelImage {
 }
 
 /// Two distinct random embedded images of a species, or `None` if there are
-/// fewer than two.
+/// fewer than two. With `unlabelled_only`, images that appear in any pair are
+/// skipped, which is what validation needs.
 pub async fn random_pair(
     pool: &PgPool,
     species: &str,
+    unlabelled_only: bool,
 ) -> sqlx::Result<Option<(LabelImage, LabelImage)>> {
     let mut rows = sqlx::query_as!(
         LabelImage,
         "select id, image_url, source_url from images
          where species = $1 and embedding is not null and not hidden
+           and ($2 = false or not exists (
+               select 1 from pairs where winner_id = images.id or loser_id = images.id))
          order by random() limit 2",
         species,
+        unlabelled_only,
     )
     .fetch_all(pool)
     .await?;
@@ -188,11 +193,61 @@ pub async fn ranking(
 }
 
 /// Record that one image beat another.
-pub async fn insert_pair(pool: &PgPool, winner: i64, loser: i64) -> sqlx::Result<()> {
-    sqlx::query!("insert into pairs (winner_id, loser_id) values ($1, $2)", winner, loser)
-        .execute(pool)
-        .await?;
+pub async fn insert_pair(
+    pool: &PgPool,
+    winner: i64,
+    loser: i64,
+    validation: bool,
+) -> sqlx::Result<()> {
+    sqlx::query!(
+        "insert into pairs (winner_id, loser_id, validation) values ($1, $2, $3)",
+        winner,
+        loser,
+        validation,
+    )
+    .execute(pool)
+    .await?;
     Ok(())
+}
+
+/// Current scores of two images, `None` where unscored.
+pub async fn pair_scores(
+    pool: &PgPool,
+    winner: i64,
+    loser: i64,
+) -> sqlx::Result<(Option<f32>, Option<f32>)> {
+    let row = sqlx::query!(
+        "select (select score from images where id = $1) as winner,
+                (select score from images where id = $2) as loser",
+        winner,
+        loser,
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok((row.winner, row.loser))
+}
+
+/// How many validation pairs exist and how many the current scores agree
+/// with.
+pub async fn validation_stats(pool: &PgPool) -> sqlx::Result<(i64, i64)> {
+    let row = sqlx::query!(
+        r#"select count(*) as "total!",
+                  count(*) filter (where w.score > l.score) as "agreed!"
+           from pairs p
+           join images w on w.id = p.winner_id
+           join images l on l.id = p.loser_id
+           where p.validation"#
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok((row.total, row.agreed))
+}
+
+/// Turn every validation pair into a training pair. Returns how many moved.
+pub async fn promote_validation(pool: &PgPool) -> sqlx::Result<u64> {
+    let result =
+        sqlx::query!("update pairs set validation = false where validation").execute(pool).await?;
+    Ok(result.rows_affected())
 }
 
 /// Total labelled pairs.
@@ -200,15 +255,15 @@ pub async fn count_pairs(pool: &PgPool) -> sqlx::Result<i64> {
     sqlx::query_scalar!(r#"select count(*) as "count!" from pairs"#).fetch_one(pool).await
 }
 
-/// Embeddings for every pair where both images are embedded, as
-/// `(winner, loser)`.
+/// Embeddings for every training pair where both images are embedded, as
+/// `(winner, loser)`. Validation pairs are left out.
 pub async fn pair_embeddings(pool: &PgPool) -> sqlx::Result<Vec<(Vec<f32>, Vec<f32>)>> {
     sqlx::query!(
         r#"select w.embedding as "winner!", l.embedding as "loser!"
            from pairs p
            join images w on w.id = p.winner_id
            join images l on l.id = p.loser_id
-           where w.embedding is not null and l.embedding is not null"#
+           where w.embedding is not null and l.embedding is not null and not p.validation"#
     )
     .map(|row| (row.winner, row.loser))
     .fetch_all(pool)

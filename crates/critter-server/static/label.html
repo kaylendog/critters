@@ -15,6 +15,10 @@
   figure img { width: 100%; height: 70vh; object-fit: contain; background: #0003; }
   /* While a pair loads the old picture is hidden and a placeholder sits on top,
      so there is never a moment where a stale image looks like a real choice. */
+  /* After a validation pick, the model's choice is outlined. Green when it
+     matched yours, red when it did not. */
+  figure.agree { border-color: #3a3; }
+  figure.disagree { border-color: #c33; }
   figure.loading { cursor: wait; }
   figure.loading img { visibility: hidden; }
   figure.loading::after { content: "Loading…"; position: absolute; inset: 0; display: grid; place-items: center; font-size: 1.2rem; opacity: .6; }
@@ -33,7 +37,10 @@
   </label>
   <button id="skip">Skip</button>
   <button id="train">Train</button>
+  <label title="Pairs from images the model has never trained on. Your pick is kept out of training and compared with the model's."><input type="checkbox" id="validate"> Validate</label>
+  <button id="promote" hidden title="Move all validation pairs into training">Promote</button>
   <span>Pairs: <strong id="count">–</strong></span>
+  <span id="accuracy"></span>
   <span>Pick the better photo. <kbd>A</kbd>/<kbd>←</kbd> left, <kbd>B</kbd>/<kbd>→</kbd> right, <kbd>S</kbd> skip, <kbd>1</kbd>/<kbd>2</kbd> never show.</span>
 </header>
 <section id="pair">
@@ -56,7 +63,24 @@
   token.addEventListener('change', () => { localStorage.setItem('token', token.value); load(); });
   species.addEventListener('change', () => { localStorage.setItem('species', species.value); load(); });
 
+  const validate = document.getElementById('validate');
+  const promote = document.getElementById('promote');
+  const accuracy = document.getElementById('accuracy');
+  validate.checked = localStorage.getItem('validate') === 'true';
+  promote.hidden = !validate.checked;
+  validate.addEventListener('change', () => {
+    localStorage.setItem('validate', validate.checked);
+    promote.hidden = !validate.checked;
+    load();
+  });
+
   let current = null;
+
+  function showAccuracy(stats) {
+    accuracy.textContent = stats.total
+      ? `Validation: ${Math.round(100 * stats.agreed / stats.total)}% of ${stats.total}`
+      : '';
+  }
 
   async function api(path, options = {}) {
     const response = await fetch(path, {
@@ -83,6 +107,7 @@
   function setLoading(loading) {
     for (const figure of document.querySelectorAll('figure')) {
       figure.classList.toggle('loading', loading);
+      figure.classList.remove('agree', 'disagree');
       if (loading) {
         figure.querySelector('img').removeAttribute('src');
         figure.querySelector('figcaption').textContent = '';
@@ -96,7 +121,8 @@
     status.textContent = '';
     setLoading(true);
     try {
-      const pair = await api(`/label/pair?species=${encodeURIComponent(species.value)}`);
+      const pair = await api(`/label/pair?species=${encodeURIComponent(species.value)}&validation=${validate.checked}`);
+      showAccuracy(pair.validation);
       const [a, b] = await Promise.all([show('a', pair.a), show('b', pair.b)]);
       if (!a || !b) status.textContent = 'An image failed to load. Skip, or hide it.';
       current = pair;
@@ -112,7 +138,24 @@
     if (!current) return;
     const loser = winner === 'a' ? 'b' : 'a';
     try {
-      await api('/label', { method: 'POST', body: JSON.stringify({ winner: current[winner].id, loser: current[loser].id }) });
+      const pair = current;
+      const result = await api('/label', {
+        method: 'POST',
+        body: JSON.stringify({ winner: pair[winner].id, loser: pair[loser].id, validation: validate.checked }),
+      });
+      if (result) {
+        // Validation: reveal the model's pick, then move on after a beat.
+        current = null;
+        showAccuracy(result.validation);
+        if (result.model_winner === null) {
+          status.textContent = 'Recorded. The model has no score for one of these yet.';
+        } else {
+          const side = result.model_winner === pair.a.id ? 'a' : 'b';
+          document.getElementById(side).classList.add(result.agreed ? 'agree' : 'disagree');
+          status.textContent = `Model picked ${side === 'a' ? 'left' : 'right'} with ${Math.round(100 * result.confidence)}% confidence. ${result.agreed ? 'Agreed.' : 'Disagreed.'}`;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
       await load();
     } catch (error) {
       status.textContent = `Could not save: ${error.message}`;
@@ -149,6 +192,15 @@
   document.getElementById('skip').addEventListener('click', load);
   document.querySelectorAll('#hide button').forEach((button) => button.addEventListener('click', () => hide(button.dataset.side)));
   document.getElementById('train').addEventListener('click', train);
+  promote.addEventListener('click', async () => {
+    try {
+      const result = await api('/label/promote', { method: 'POST' });
+      status.textContent = `Promoted ${result.promoted} validation pairs to training. Retrain to use them.`;
+      await load();
+    } catch (error) {
+      status.textContent = `Could not promote: ${error.message}`;
+    }
+  });
   document.addEventListener('keydown', (event) => {
     if (event.target === token) return;
     const key = event.key.toLowerCase();

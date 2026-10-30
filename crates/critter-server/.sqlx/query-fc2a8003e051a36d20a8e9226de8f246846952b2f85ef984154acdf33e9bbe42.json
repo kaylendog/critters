@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select count(*) as \"total!\",\n                  count(*) filter (where w.score > l.score) as \"agreed!\"\n           from pairs p\n           join images w on w.id = p.winner_id\n           join images l on l.id = p.loser_id\n           where p.validation",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "agreed!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "fc2a8003e051a36d20a8e9226de8f246846952b2f85ef984154acdf33e9bbe42"
+}

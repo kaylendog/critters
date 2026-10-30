@@ -8,17 +8,20 @@ use axum::{
     extract::{Query, State},
     http::StatusCode,
     middleware,
-    response::Html,
+    response::{Html, IntoResponse, Response},
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{App, db, ml::rank, require_admin, sources};
 
-/// Query string for `GET /label/pair`.
+/// Query string for `GET /label/pair` and `GET /label/ranking.json`.
 #[derive(Deserialize)]
 struct PairQuery {
     species: String,
+    /// Only offer images that appear in no pair yet.
+    #[serde(default)]
+    validation: bool,
 }
 
 /// Two candidates to compare, plus how many pairs are labelled so far.
@@ -27,6 +30,14 @@ struct Pair {
     a: db::LabelImage,
     b: db::LabelImage,
     pairs: i64,
+    validation: ValidationStats,
+}
+
+/// How the ranker is doing on pairs it has not trained on.
+#[derive(Serialize)]
+struct ValidationStats {
+    total: i64,
+    agreed: i64,
 }
 
 /// Body of `POST /label`.
@@ -34,6 +45,21 @@ struct Pair {
 struct Verdict {
     winner: i64,
     loser: i64,
+    /// Record as a validation pair, kept out of training, and report what the
+    /// model would have picked.
+    #[serde(default)]
+    validation: bool,
+}
+
+/// Response to a validation verdict.
+#[derive(Serialize)]
+struct Checked {
+    /// The image the model preferred, or `None` when either is unscored.
+    model_winner: Option<i64>,
+    /// `P(model's pick beats the other)` under the Bradley-Terry model.
+    confidence: Option<f32>,
+    agreed: Option<bool>,
+    validation: ValidationStats,
 }
 
 /// Body of `POST /label/hide`.
@@ -61,6 +87,7 @@ pub fn router(app: App) -> Router<App> {
         .route("/label/pair", get(pair))
         .route("/label/hide", post(hide))
         .route("/label/train", post(train))
+        .route("/label/promote", post(promote))
         .route("/label/ranking.json", get(ranking))
         .route_layer(middleware::from_fn_with_state(app, require_admin));
     Router::new().route("/label", get(page)).route("/label/ranking", get(ranking_page)).merge(api)
@@ -88,35 +115,73 @@ async fn ranking(
     Ok(Json(ranked))
 }
 
-/// `GET /label/pair?species=fox` - two random embedded photos to compare.
-/// 404 for an unknown species, 503 while fewer than two photos are embedded.
+/// `GET /label/pair?species=fox[&validation=true]` - two random embedded
+/// photos to compare. With `validation`, only photos that appear in no pair.
+/// 404 for an unknown species, 503 when fewer than two qualify.
 async fn pair(
     State(app): State<App>,
     Query(query): Query<PairQuery>,
 ) -> Result<Json<Pair>, StatusCode> {
     let species = sources::species(&query.species).ok_or(StatusCode::NOT_FOUND)?;
-    let (a, b) = db::random_pair(&app.pool, species.slug)
+    let (a, b) = db::random_pair(&app.pool, species.slug, query.validation)
         .await
         .map_err(internal)?
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
     let pairs = db::count_pairs(&app.pool).await.map_err(internal)?;
-    Ok(Json(Pair { a, b, pairs }))
+    let validation = validation_stats(&app).await?;
+    Ok(Json(Pair { a, b, pairs, validation }))
 }
 
-/// `POST /label` - record that `winner` beat `loser`. 422 if they are the
-/// same image or either does not exist.
-async fn record(State(app): State<App>, Json(verdict): Json<Verdict>) -> StatusCode {
+/// `POST /label` - record that `winner` beat `loser`. 204 for a training
+/// pair. A validation pair instead returns what the model thought. 422 if
+/// they are the same image or either does not exist.
+async fn record(
+    State(app): State<App>,
+    Json(verdict): Json<Verdict>,
+) -> Result<Response, StatusCode> {
     if verdict.winner == verdict.loser {
-        return StatusCode::UNPROCESSABLE_ENTITY;
+        return Err(StatusCode::UNPROCESSABLE_ENTITY);
     }
-    match db::insert_pair(&app.pool, verdict.winner, verdict.loser).await {
-        Ok(()) => StatusCode::NO_CONTENT,
+    match db::insert_pair(&app.pool, verdict.winner, verdict.loser, verdict.validation).await {
+        Ok(()) => {}
         // A foreign key failure means an id does not exist.
         Err(sqlx::Error::Database(error)) if error.is_foreign_key_violation() => {
-            StatusCode::UNPROCESSABLE_ENTITY
+            return Err(StatusCode::UNPROCESSABLE_ENTITY);
         }
-        Err(error) => internal(error),
+        Err(error) => return Err(internal(error)),
     }
+    if !verdict.validation {
+        return Ok(StatusCode::NO_CONTENT.into_response());
+    }
+
+    // Compare the model's view with the verdict. Confidence is the logistic
+    // of the score gap, the same quantity the ranker was trained on.
+    let (winner, loser) =
+        db::pair_scores(&app.pool, verdict.winner, verdict.loser).await.map_err(internal)?;
+    let judged = winner.zip(loser).map(|(winner, loser)| {
+        let agreed = winner > loser;
+        let gap = (winner - loser).abs();
+        let model_winner = if agreed { verdict.winner } else { verdict.loser };
+        (model_winner, 1.0 / (1.0 + (-gap).exp()), agreed)
+    });
+    Ok(Json(Checked {
+        model_winner: judged.map(|(id, _, _)| id),
+        confidence: judged.map(|(_, confidence, _)| confidence),
+        agreed: judged.map(|(_, _, agreed)| agreed),
+        validation: validation_stats(&app).await?,
+    })
+    .into_response())
+}
+
+/// `POST /label/promote` - turn every validation pair into a training pair.
+async fn promote(State(app): State<App>) -> Result<Json<serde_json::Value>, StatusCode> {
+    let promoted = db::promote_validation(&app.pool).await.map_err(internal)?;
+    Ok(Json(serde_json::json!({ "promoted": promoted })))
+}
+
+async fn validation_stats(app: &App) -> Result<ValidationStats, StatusCode> {
+    let (total, agreed) = db::validation_stats(&app.pool).await.map_err(internal)?;
+    Ok(ValidationStats { total, agreed })
 }
 
 /// `POST /label/hide` - never serve this image again, and record it as a

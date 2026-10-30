@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update pairs set validation = false where validation",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "9255c4218819e6442e3735ba56f0e3a1701e2c3b123452b7344fd18ffc7021a8"
+}

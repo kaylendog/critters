@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into pairs (winner_id, loser_id, validation) values ($1, $2, $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5bb864a8296aa5a8cb4f96fac3e7f0b9bcb03d7997e24ff653588700d81668bf"
+}
