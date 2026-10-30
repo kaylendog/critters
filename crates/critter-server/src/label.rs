@@ -61,13 +61,31 @@ pub fn router(app: App) -> Router<App> {
         .route("/label/pair", get(pair))
         .route("/label/hide", post(hide))
         .route("/label/train", post(train))
+        .route("/label/ranking.json", get(ranking))
         .route_layer(middleware::from_fn_with_state(app, require_admin));
-    Router::new().route("/label", get(page)).merge(api)
+    Router::new().route("/label", get(page)).route("/label/ranking", get(ranking_page)).merge(api)
 }
 
 /// `GET /label` - the labelling page.
 async fn page() -> Html<&'static str> {
     Html(include_str!("../static/label.html"))
+}
+
+/// `GET /label/ranking` - the ranking page.
+async fn ranking_page() -> Html<&'static str> {
+    Html(include_str!("../static/ranking.html"))
+}
+
+/// `GET /label/ranking.json?species=fox` - every image of a species, best
+/// first, with its score and whether it currently qualifies for slots.
+async fn ranking(
+    State(app): State<App>,
+    Query(query): Query<PairQuery>,
+) -> Result<Json<Vec<db::RankedImage>>, StatusCode> {
+    let species = sources::species(&query.species).ok_or(StatusCode::NOT_FOUND)?;
+    let ranked =
+        db::ranking(&app.pool, species.slug, app.config.keep_fraction).await.map_err(internal)?;
+    Ok(Json(ranked))
 }
 
 /// `GET /label/pair?species=fox` - two random embedded photos to compare.

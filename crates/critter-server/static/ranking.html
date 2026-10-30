@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Critter ranking</title>
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  body { margin: 0; padding: 1rem; }
+  header { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
+  header input, header select { font: inherit; padding: .4rem .6rem; }
+  a { color: inherit; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .6rem; }
+  figure { margin: 0; position: relative; border-radius: 6px; overflow: hidden; background: #0003; }
+  figure img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+  figcaption { font-size: .8rem; padding: .3rem .4rem; display: flex; justify-content: space-between; gap: .4rem; }
+  figure.ineligible { opacity: .45; }
+  figure.hidden { opacity: .25; filter: grayscale(1); }
+  figure button { position: absolute; top: .3rem; right: .3rem; font: inherit; line-height: 1; padding: .2rem .45rem; opacity: 0; cursor: pointer; }
+  figure:hover button { opacity: 1; }
+  .cutoff { grid-column: 1 / -1; border-top: 2px dashed currentColor; opacity: .6; padding-top: .3rem; font-size: .9rem; }
+  #status { min-height: 1.5rem; opacity: .8; }
+</style>
+</head>
+<body>
+<header>
+  <label>Token <input id="token" type="password" placeholder="ADMIN_TOKEN" autocomplete="off"></label>
+  <label>Species
+    <select id="species">
+      <option>wolf</option><option>coyote</option><option>fox</option>
+    </select>
+  </label>
+  <span id="summary"></span>
+  <a href="/label">Back to labelling</a>
+</header>
+<p id="status"></p>
+<section id="grid" class="grid"></section>
+<script>
+  // Shares the token and species with the labelling page.
+  const token = document.getElementById('token');
+  const species = document.getElementById('species');
+  const status = document.getElementById('status');
+  const summary = document.getElementById('summary');
+  const grid = document.getElementById('grid');
+  token.value = localStorage.getItem('token') || '';
+  species.value = localStorage.getItem('species') || 'fox';
+  token.addEventListener('change', () => { localStorage.setItem('token', token.value); load(); });
+  species.addEventListener('change', () => { localStorage.setItem('species', species.value); load(); });
+
+  async function api(path, options = {}) {
+    const response = await fetch(path, {
+      ...options,
+      headers: { 'Authorization': `Bearer ${token.value}`, 'Content-Type': 'application/json', ...options.headers },
+    });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    return response.status === 204 ? null : response.json();
+  }
+
+  // Only follow http(s) URLs. Source and image URLs come from upstream APIs,
+  // so they are data, not markup.
+  function safeUrl(value) {
+    try {
+      const url = new URL(value, location.href);
+      return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : '';
+    } catch {
+      return '';
+    }
+  }
+
+  function tile(image) {
+    const figure = document.createElement('figure');
+    figure.className = image.hidden ? 'hidden' : image.eligible ? '' : 'ineligible';
+    const score = image.score === null ? 'unscored' : image.score.toFixed(3);
+
+    const link = document.createElement('a');
+    link.href = safeUrl(image.source_url);
+    link.target = '_blank';
+    link.rel = 'noopener';
+    const img = document.createElement('img');
+    img.src = safeUrl(image.image_url);
+    img.loading = 'lazy';
+    img.alt = '';
+    link.append(img);
+
+    const caption = document.createElement('figcaption');
+    const id = document.createElement('span');
+    id.textContent = `#${image.id}`;
+    const label = document.createElement('span');
+    label.textContent = image.hidden ? 'hidden' : score;
+    caption.append(id, label);
+    figure.append(link, caption);
+
+    if (!image.hidden) {
+      const button = document.createElement('button');
+      button.textContent = '✕';
+      button.title = 'Never show';
+      button.addEventListener('click', () => hide(image.id));
+      figure.append(button);
+    }
+    return figure;
+  }
+
+  async function load() {
+    status.textContent = '';
+    grid.replaceChildren();
+    try {
+      const images = await api(`/label/ranking.json?species=${encodeURIComponent(species.value)}`);
+      const eligible = images.filter((image) => image.eligible).length;
+      const hidden = images.filter((image) => image.hidden).length;
+      summary.textContent = `${images.length} images, ${eligible} eligible, ${hidden} hidden`;
+
+      // Eligible first, then a dashed line, then the rest.
+      let drewCutoff = false;
+      for (const image of images) {
+        if (!drewCutoff && !image.eligible) {
+          const cutoff = document.createElement('div');
+          cutoff.className = 'cutoff';
+          cutoff.textContent = 'Below the cutoff. Not served.';
+          grid.append(cutoff);
+          drewCutoff = true;
+        }
+        grid.append(tile(image));
+      }
+    } catch (error) {
+      status.textContent = error.message === '401 Unauthorized' ? 'Enter the admin token.' : `Could not load: ${error.message}`;
+    }
+  }
+
+  async function hide(id) {
+    try {
+      await api('/label/hide', { method: 'POST', body: JSON.stringify({ id }) });
+      status.textContent = `Hidden #${id}. Retrain on the labelling page to rescore.`;
+      await load();
+    } catch (error) {
+      status.textContent = `Could not hide: ${error.message}`;
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>

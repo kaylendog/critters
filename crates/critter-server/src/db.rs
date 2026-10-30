@@ -146,6 +146,47 @@ pub async fn hide_image(pool: &PgPool, id: i64, opponent: Option<i64>) -> sqlx::
     Ok(true)
 }
 
+/// One row of the ranking page.
+#[derive(Debug, Serialize)]
+pub struct RankedImage {
+    pub id: i64,
+    pub score: Option<f32>,
+    pub image_url: String,
+    pub source_url: String,
+    pub hidden: bool,
+    /// Whether the image currently qualifies for slots.
+    pub eligible: bool,
+}
+
+/// Every image of a species, best first, with the same eligibility rule as
+/// [`eligible_ids`]. Hidden images sort last.
+pub async fn ranking(
+    pool: &PgPool,
+    species: &str,
+    keep_fraction: f64,
+) -> sqlx::Result<Vec<RankedImage>> {
+    sqlx::query_as!(
+        RankedImage,
+        r#"with cutoff as (
+               select percentile_cont(1 - $2::float8) within group (order by score) as score
+               from images where species = $1 and score is not null
+           )
+           select id, score, image_url, source_url, hidden,
+                  (not hidden and coalesce(
+                      case when exists (select 1 from model)
+                           then score >= (select score from cutoff)
+                           else true end,
+                      false)) as "eligible!"
+           from images
+           where species = $1
+           order by hidden, score desc nulls last, id"#,
+        species,
+        keep_fraction,
+    )
+    .fetch_all(pool)
+    .await
+}
+
 /// Record that one image beat another.
 pub async fn insert_pair(pool: &PgPool, winner: i64, loser: i64) -> sqlx::Result<()> {
     sqlx::query!("insert into pairs (winner_id, loser_id) values ($1, $2)", winner, loser)

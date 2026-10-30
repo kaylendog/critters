@@ -1,0 +1,84 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "with cutoff as (\n               select percentile_cont(1 - $2::float8) within group (order by score) as score\n               from images where species = $1 and score is not null\n           )\n           select id, score, image_url, source_url, hidden,\n                  (not hidden and coalesce(\n                      case when exists (select 1 from model)\n                           then score >= (select score from cutoff)\n                           else true end,\n                      false)) as \"eligible!\"\n           from images\n           where species = $1\n           order by hidden, score desc nulls last, id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "score",
+        "type_info": "Float4",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "score"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "image_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "image_url"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "source_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "source_url"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "hidden",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "hidden"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "eligible!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "40dfd9fe3bfd7ea40916bcf8d68e6bb626160de9cbc1b24995254c3f25f59da3"
+}
