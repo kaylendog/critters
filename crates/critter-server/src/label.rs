@@ -123,10 +123,19 @@ async fn pair(
     Query(query): Query<PairQuery>,
 ) -> Result<Json<Pair>, StatusCode> {
     let species = sources::species(&query.species).ok_or(StatusCode::NOT_FOUND)?;
-    let (a, b) = db::random_pair(&app.pool, species.slug, query.validation)
+    // Validation pairs stay uniformly random so accuracy is not skewed toward
+    // hard cases. Training pairs are drawn from a wider pool and narrowed to
+    // the closest call.
+    let (limit, explore) =
+        if query.validation { (2, true) } else { (CANDIDATES, rand::random::<f32>() < EXPLORE) };
+    let mut candidates = db::random_candidates(&app.pool, species.slug, query.validation, limit)
         .await
-        .map_err(internal)?
-        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+        .map_err(internal)?;
+    let scores: Vec<_> = candidates.iter().map(|image| image.score).collect();
+    let (i, j) = closest_pair(&scores, explore).ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    // Remove the higher index first so the lower one stays valid.
+    let b = candidates.swap_remove(j.max(i));
+    let a = candidates.swap_remove(j.min(i));
     let pairs = db::count_pairs(&app.pool).await.map_err(internal)?;
     let validation = validation_stats(&app).await?;
     Ok(Json(Pair { a, b, pairs, validation }))
@@ -213,4 +222,47 @@ async fn train(State(app): State<App>) -> Result<Json<Trained>, StatusCode> {
 fn internal(error: sqlx::Error) -> StatusCode {
     tracing::error!(%error, "label query failed");
     StatusCode::INTERNAL_SERVER_ERROR
+}
+
+/// Random images considered for each training pair.
+const CANDIDATES: i64 = 40;
+/// Share of training pairs that are plain random. Keeps every part of the pool
+/// in play, so the model cannot get stuck refining one score band.
+const EXPLORE: f32 = 0.2;
+
+/// Indices of the two candidates whose scores are closest, which is where a
+/// verdict teaches the ranker most. Falls back to the first two when
+/// exploring or when anything is unscored, such as before the first training
+/// run. `None` with fewer than two candidates.
+// ponytail: O(n²) over 40 candidates. Sort first if CANDIDATES grows large.
+fn closest_pair(scores: &[Option<f32>], explore: bool) -> Option<(usize, usize)> {
+    if scores.len() < 2 {
+        return None;
+    }
+    if explore || scores.iter().any(Option::is_none) {
+        return Some((0, 1));
+    }
+    let scores: Vec<f32> = scores.iter().flatten().copied().collect();
+    (0..scores.len()).flat_map(|i| (i + 1..scores.len()).map(move |j| (i, j))).min_by(
+        |&(a, b), &(c, d)| (scores[a] - scores[b]).abs().total_cmp(&(scores[c] - scores[d]).abs()),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn closest_pair_picks_nearest_scores() {
+        let scores = [Some(0.9), Some(0.1), Some(0.52), Some(-0.4), Some(0.5)];
+        assert_eq!(closest_pair(&scores, false), Some((2, 4)));
+    }
+
+    #[test]
+    fn closest_pair_falls_back_to_random() {
+        let scores = [Some(0.9), Some(0.1), Some(0.52), Some(0.5)];
+        assert_eq!(closest_pair(&scores, true), Some((0, 1)));
+        assert_eq!(closest_pair(&[Some(0.9), None, Some(0.9)], false), Some((0, 1)));
+        assert_eq!(closest_pair(&[Some(0.9)], false), None);
+    }
 }

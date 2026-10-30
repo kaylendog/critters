@@ -79,32 +79,33 @@ pub struct LabelImage {
     pub id: i64,
     pub image_url: String,
     pub source_url: String,
+    /// Current ranker score. Used to pick pairs, not shown on the page.
+    #[serde(skip)]
+    pub score: Option<f32>,
 }
 
-/// Two distinct random embedded images of a species, or `None` if there are
-/// fewer than two. With `unlabelled_only`, images that appear in any pair are
-/// skipped, which is what validation needs.
-pub async fn random_pair(
+/// Up to `limit` random embedded, visible images of a species. With
+/// `unlabelled_only`, images that appear in any pair are skipped, which is
+/// what validation needs.
+pub async fn random_candidates(
     pool: &PgPool,
     species: &str,
     unlabelled_only: bool,
-) -> sqlx::Result<Option<(LabelImage, LabelImage)>> {
-    let mut rows = sqlx::query_as!(
+    limit: i64,
+) -> sqlx::Result<Vec<LabelImage>> {
+    sqlx::query_as!(
         LabelImage,
-        "select id, image_url, source_url from images
+        "select id, image_url, source_url, score from images
          where species = $1 and embedding is not null and not hidden
            and ($2 = false or not exists (
                select 1 from pairs where winner_id = images.id or loser_id = images.id))
-         order by random() limit 2",
+         order by random() limit $3",
         species,
         unlabelled_only,
+        limit,
     )
     .fetch_all(pool)
-    .await?;
-    Ok(match (rows.pop(), rows.pop()) {
-        (Some(b), Some(a)) => Some((a, b)),
-        _ => None,
-    })
+    .await
 }
 
 /// How many past winners a hidden image is recorded as losing to.
