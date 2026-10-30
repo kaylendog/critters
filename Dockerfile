@@ -4,7 +4,9 @@
 # The default is the server.
 ARG BIN=critter-server
 
-FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
+# Builder and runtime must share a Debian release, or the binary needs a newer
+# glibc than the runtime has. Change both together.
+FROM lukemathwalker/cargo-chef:latest-rust-1-trixie AS chef
 WORKDIR /app
 
 FROM chef AS planner
@@ -20,7 +22,7 @@ RUN cargo chef cook --release --bin "$BIN" --recipe-path recipe.json
 COPY . .
 RUN cargo build --release --bin "$BIN" && cp "target/release/$BIN" /app/entrypoint
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
