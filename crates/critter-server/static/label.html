@@ -128,7 +128,12 @@
       current = pair;
       count.textContent = pair.pairs;
     } catch (error) {
-      status.textContent = error.message === '401 Unauthorized' ? 'Enter the admin token.' : `Could not load a pair: ${error.message}`;
+      let message = `Could not load a pair: ${error.message}`;
+      if (error.message === '401 Unauthorized') message = 'Enter the admin token.';
+      else if (error.message.startsWith('503') && validate.checked) message = `No unlabelled ${species.value} images left to validate on. Pick another species, or ingest more.`;
+      else if (error.message.startsWith('503')) message = `Fewer than two embedded ${species.value} images. Run a seed first.`;
+      // Keep whatever the previous action reported, such as a promote count.
+      status.textContent = [status.textContent, message].filter(Boolean).join(' ');
     } finally {
       setLoading(false);
     }
