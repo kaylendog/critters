@@ -1,0 +1,40 @@
+# Dev: `docker compose up -d` gives you Postgres only; run the server with `cargo run`.
+# Full stack: `docker compose --profile app up --build`.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: critters
+      POSTGRES_PASSWORD: critters
+      POSTGRES_DB: critters
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U critters"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    profiles: [app]
+    build: .
+    image: ghcr.io/kaylendog/daily-critters:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://critters:critters@postgres/critters
+      # Leave unset to have the server generate one and print it in the logs.
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      USER_AGENT: ${USER_AGENT:-daily-critters (https://github.com/kaylendog/daily-critters)}
+      RUST_LOG: ${RUST_LOG:-daily_critters=info}
+    ports:
+      - "8080:8080"
+    volumes:
+      - appdata:/data
+
+volumes:
+  pgdata:
+  appdata:
