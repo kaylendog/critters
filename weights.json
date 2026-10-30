@@ -36407,6 +36407,126 @@
             "winner_source": "commons",
             "loser_source_id": "371029990",
             "winner_source_id": "88128980"
+        },
+        {
+            "created_at": "2026-10-30T23:25:23.037223+00:00",
+            "validation": false,
+            "loser_source": "commons",
+            "winner_source": "inaturalist",
+            "loser_source_id": "11029344",
+            "winner_source_id": "532854046"
+        },
+        {
+            "created_at": "2026-10-30T23:25:23.037223+00:00",
+            "validation": false,
+            "loser_source": "commons",
+            "winner_source": "inaturalist",
+            "loser_source_id": "11029344",
+            "winner_source_id": "14648735"
+        },
+        {
+            "created_at": "2026-10-30T23:25:23.037223+00:00",
+            "validation": false,
+            "loser_source": "commons",
+            "winner_source": "commons",
+            "loser_source_id": "11029344",
+            "winner_source_id": "84720699"
+        },
+        {
+            "created_at": "2026-10-30T23:25:23.037223+00:00",
+            "validation": false,
+            "loser_source": "commons",
+            "winner_source": "commons",
+            "loser_source_id": "11029344",
+            "winner_source_id": "15754284"
+        },
+        {
+            "created_at": "2026-10-30T23:25:23.037223+00:00",
+            "validation": false,
+            "loser_source": "commons",
+            "winner_source": "commons",
+            "loser_source_id": "11029344",
+            "winner_source_id": "48477694"
+        },
+        {
+            "created_at": "2026-10-30T23:25:42.337978+00:00",
+            "validation": false,
+            "loser_source": "inaturalist",
+            "winner_source": "inaturalist",
+            "loser_source_id": "346157845",
+            "winner_source_id": "314245734"
+        },
+        {
+            "created_at": "2026-10-30T23:25:42.337978+00:00",
+            "validation": false,
+            "loser_source": "inaturalist",
+            "winner_source": "inaturalist",
+            "loser_source_id": "346157845",
+            "winner_source_id": "618378104"
+        },
+        {
+            "created_at": "2026-10-30T23:25:42.337978+00:00",
+            "validation": false,
+            "loser_source": "inaturalist",
+            "winner_source": "inaturalist",
+            "loser_source_id": "346157845",
+            "winner_source_id": "474764441"
+        },
+        {
+            "created_at": "2026-10-30T23:25:42.337978+00:00",
+            "validation": false,
+            "loser_source": "inaturalist",
+            "winner_source": "inaturalist",
+            "loser_source_id": "346157845",
+            "winner_source_id": "756315465"
+        },
+        {
+            "created_at": "2026-10-30T23:25:42.337978+00:00",
+            "validation": false,
+            "loser_source": "inaturalist",
+            "winner_source": "commons",
+            "loser_source_id": "346157845",
+            "winner_source_id": "16470453"
+        },
+        {
+            "created_at": "2026-10-30T23:26:32.375529+00:00",
+            "validation": false,
+            "loser_source": "inaturalist",
+            "winner_source": "inaturalist",
+            "loser_source_id": "703289320",
+            "winner_source_id": "344094467"
+        },
+        {
+            "created_at": "2026-10-30T23:26:32.375529+00:00",
+            "validation": false,
+            "loser_source": "inaturalist",
+            "winner_source": "inaturalist",
+            "loser_source_id": "703289320",
+            "winner_source_id": "693276368"
+        },
+        {
+            "created_at": "2026-10-30T23:26:32.375529+00:00",
+            "validation": false,
+            "loser_source": "inaturalist",
+            "winner_source": "inaturalist",
+            "loser_source_id": "703289320",
+            "winner_source_id": "474780021"
+        },
+        {
+            "created_at": "2026-10-30T23:26:32.375529+00:00",
+            "validation": false,
+            "loser_source": "inaturalist",
+            "winner_source": "commons",
+            "loser_source_id": "703289320",
+            "winner_source_id": "3119878"
+        },
+        {
+            "created_at": "2026-10-30T23:26:32.375529+00:00",
+            "validation": false,
+            "loser_source": "inaturalist",
+            "winner_source": "inaturalist",
+            "loser_source_id": "703289320",
+            "winner_source_id": "755931989"
         }
     ],
     "images": [
@@ -75612,6 +75732,20 @@
         },
         {
             "width": 1280,
+            "author": "Winkelbohrer from Schweiz",
+            "height": 622,
+            "hidden": true,
+            "source": "commons",
+            "license": "CC-BY-SA-2.0",
+            "species": "snow-leopard",
+            "image_url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/08/Uncia_uncia_-Zurich_Zoo%2C_Switzerland-8a_%284%29.jpg/1280px-Uncia_uncia_-Zurich_Zoo%2C_Switzerland-8a_%284%29.jpg",
+            "source_id": "11029344",
+            "author_url": "https://www.flickr.com/photos/25641775@N05",
+            "source_url": "https://commons.wikimedia.org/wiki/File:Uncia_uncia_-Zurich_Zoo,_Switzerland-8a_(4).jpg",
+            "license_url": "https://creativecommons.org/licenses/by-sa/2.0"
+        },
+        {
+            "width": 1280,
             "author": "Uusijani",
             "height": 960,
             "hidden": false,
@@ -76088,6 +76222,20 @@
         },
         {
             "width": null,
+            "author": "Wildlife biologist - Dovchoo",
+            "height": null,
+            "hidden": true,
+            "source": "inaturalist",
+            "license": "CC-BY-NC",
+            "species": "snow-leopard",
+            "image_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/346157845/large.jpeg",
+            "source_id": "346157845",
+            "author_url": "https://www.inaturalist.org/people/dovchindorj",
+            "source_url": "https://www.inaturalist.org/observations/196653599",
+            "license_url": null
+        },
+        {
+            "width": null,
             "author": "danplant",
             "height": null,
             "hidden": false,
@@ -76546,6 +76694,20 @@
             "source_id": "51253029",
             "author_url": "https://www.inaturalist.org/people/sahalsey",
             "source_url": "https://www.inaturalist.org/observations/32666595",
+            "license_url": null
+        },
+        {
+            "width": null,
+            "author": "Phunchok Tsering",
+            "height": null,
+            "hidden": true,
+            "source": "inaturalist",
+            "license": "CC-BY-NC",
+            "species": "snow-leopard",
+            "image_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/703289320/large.jpg",
+            "source_id": "703289320",
+            "author_url": "https://www.inaturalist.org/people/phunchok",
+            "source_url": "https://www.inaturalist.org/observations/384212265",
             "license_url": null
         },
         {
