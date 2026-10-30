@@ -356,6 +356,97 @@ pub async fn save_model(pool: &PgPool, weights: &[f32]) -> sqlx::Result<()> {
     Ok(())
 }
 
+/// Everything learned from labelling, as pretty-printed JSON. Includes the
+/// model, every pair, and the images those pairs and hides refer to. Images
+/// are keyed by `(source, source_id)`, so the file can be imported into a
+/// database where ids differ.
+pub async fn export(pool: &PgPool) -> sqlx::Result<String> {
+    sqlx::query_scalar!(
+        r#"select jsonb_pretty(jsonb_build_object(
+               'weights', (select to_jsonb(weights) from model),
+               'images', coalesce((
+                   select jsonb_agg(jsonb_build_object(
+                       'species', species, 'source', source, 'source_id', source_id,
+                       'image_url', image_url, 'source_url', source_url,
+                       'author', author, 'author_url', author_url,
+                       'license', license, 'license_url', license_url,
+                       'width', width, 'height', height, 'hidden', hidden) order by id)
+                   from images i
+                   where hidden or exists (select 1 from pairs p where i.id in (p.winner_id, p.loser_id))
+               ), '[]'),
+               'pairs', coalesce((
+                   select jsonb_agg(jsonb_build_object(
+                       'winner_source', w.source, 'winner_source_id', w.source_id,
+                       'loser_source', l.source, 'loser_source_id', l.source_id,
+                       'validation', p.validation, 'created_at', p.created_at) order by p.id)
+                   from pairs p
+                   join images w on w.id = p.winner_id
+                   join images l on l.id = p.loser_id
+               ), '[]')
+           )) as "export!""#
+    )
+    .fetch_one(pool)
+    .await
+}
+
+/// Load a file written by [`export`]. Images are inserted if missing, and
+/// marked hidden if hidden in either place. Refuses a database that already
+/// has pairs, since importing twice would count every verdict twice. Returns
+/// `(new images, pairs)`.
+pub async fn import(pool: &PgPool, json: &str) -> anyhow::Result<(u64, u64)> {
+    let mut tx = pool.begin().await?;
+    let existing = sqlx::query_scalar!(r#"select count(*) as "count!" from pairs"#)
+        .fetch_one(&mut *tx)
+        .await?;
+    anyhow::ensure!(existing == 0, "database already has {existing} pairs");
+
+    // `xmax = 0` is only true for freshly inserted rows, not updated ones.
+    let images = sqlx::query_scalar!(
+        r#"insert into images as i (species, source, source_id, image_url, source_url, author,
+                                    author_url, license, license_url, width, height, hidden)
+           select * from jsonb_to_recordset($1::text::jsonb -> 'images') as t(
+               species text, source text, source_id text, image_url text, source_url text,
+               author text, author_url text, license text, license_url text,
+               width int, height int, hidden bool)
+           on conflict (source, source_id) do update set hidden = i.hidden or excluded.hidden
+           returning (xmax = 0) as "inserted!""#,
+        json,
+    )
+    .fetch_all(&mut *tx)
+    .await?
+    .into_iter()
+    .filter(|inserted| *inserted)
+    .count() as u64;
+
+    let pairs = sqlx::query!(
+        "insert into pairs (winner_id, loser_id, validation, created_at)
+         select w.id, l.id, t.validation, t.created_at
+         from jsonb_to_recordset($1::text::jsonb -> 'pairs') as t(
+             winner_source text, winner_source_id text, loser_source text,
+             loser_source_id text, validation bool, created_at timestamptz)
+         join images w on (w.source, w.source_id) = (t.winner_source, t.winner_source_id)
+         join images l on (l.source, l.source_id) = (t.loser_source, t.loser_source_id)",
+        json,
+    )
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+
+    // The weights only depend on CLIP, so they score new images as they are.
+    sqlx::query!(
+        "insert into model (id, weights)
+         select 1, array(select jsonb_array_elements_text($1::text::jsonb -> 'weights')::real)
+         where jsonb_typeof($1::text::jsonb -> 'weights') = 'array'
+         on conflict (id) do update set weights = excluded.weights, trained_at = now()",
+        json,
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok((images, pairs))
+}
+
 /// Recompute every embedded image's score as the dot product with the stored
 /// model, in one statement.
 pub async fn rescore(pool: &PgPool) -> sqlx::Result<()> {

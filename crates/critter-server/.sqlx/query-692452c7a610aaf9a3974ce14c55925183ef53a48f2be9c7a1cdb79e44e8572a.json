@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select jsonb_pretty(jsonb_build_object(\n               'weights', (select to_jsonb(weights) from model),\n               'images', coalesce((\n                   select jsonb_agg(jsonb_build_object(\n                       'species', species, 'source', source, 'source_id', source_id,\n                       'image_url', image_url, 'source_url', source_url,\n                       'author', author, 'author_url', author_url,\n                       'license', license, 'license_url', license_url,\n                       'width', width, 'height', height, 'hidden', hidden) order by id)\n                   from images i\n                   where hidden or exists (select 1 from pairs p where i.id in (p.winner_id, p.loser_id))\n               ), '[]'),\n               'pairs', coalesce((\n                   select jsonb_agg(jsonb_build_object(\n                       'winner_source', w.source, 'winner_source_id', w.source_id,\n                       'loser_source', l.source, 'loser_source_id', l.source_id,\n                       'validation', p.validation, 'created_at', p.created_at) order by p.id)\n                   from pairs p\n                   join images w on w.id = p.winner_id\n                   join images l on l.id = p.loser_id\n               ), '[]')\n           )) as \"export!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "export!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "692452c7a610aaf9a3974ce14c55925183ef53a48f2be9c7a1cdb79e44e8572a"
+}

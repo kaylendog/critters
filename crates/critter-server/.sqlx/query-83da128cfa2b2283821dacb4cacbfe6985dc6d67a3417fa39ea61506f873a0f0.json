@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into images as i (species, source, source_id, image_url, source_url, author,\n                                    author_url, license, license_url, width, height, hidden)\n           select * from jsonb_to_recordset($1::text::jsonb -> 'images') as t(\n               species text, source text, source_id text, image_url text, source_url text,\n               author text, author_url text, license text, license_url text,\n               width int, height int, hidden bool)\n           on conflict (source, source_id) do update set hidden = i.hidden or excluded.hidden\n           returning (xmax = 0) as \"inserted!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "inserted!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "83da128cfa2b2283821dacb4cacbfe6985dc6d67a3417fa39ea61506f873a0f0"
+}

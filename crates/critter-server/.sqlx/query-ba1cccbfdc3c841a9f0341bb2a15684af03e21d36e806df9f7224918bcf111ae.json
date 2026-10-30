@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into pairs (winner_id, loser_id, validation, created_at)\n         select w.id, l.id, t.validation, t.created_at\n         from jsonb_to_recordset($1::text::jsonb -> 'pairs') as t(\n             winner_source text, winner_source_id text, loser_source text,\n             loser_source_id text, validation bool, created_at timestamptz)\n         join images w on (w.source, w.source_id) = (t.winner_source, t.winner_source_id)\n         join images l on (l.source, l.source_id) = (t.loser_source, t.loser_source_id)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ba1cccbfdc3c841a9f0341bb2a15684af03e21d36e806df9f7224918bcf111ae"
+}

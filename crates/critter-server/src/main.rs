@@ -99,6 +99,11 @@ enum Command {
     },
     /// Retrain the ranker from stored pairs and rescore every image.
     Train,
+    /// Write the model, pairs and hides to a JSON file.
+    Export { path: PathBuf },
+    /// Load a file from `export` into a database with no pairs, then embed
+    /// and score the imported images.
+    Import { path: PathBuf },
 }
 
 /// The application state, shared between all request handlers.
@@ -161,6 +166,20 @@ async fn main() -> anyhow::Result<()> {
         Command::Train => {
             let pairs = ml::rank::retrain(&app).await?;
             println!("trained on {pairs} pairs");
+            Ok(())
+        }
+        Command::Export { path } => {
+            std::fs::write(&path, db::export(&app.pool).await?)?;
+            println!("exported to {}", path.display());
+            Ok(())
+        }
+        Command::Import { path } => {
+            let json = std::fs::read_to_string(&path)?;
+            let (images, pairs) = db::import(&app.pool, &json).await?;
+            println!("imported {pairs} pairs and {images} new images");
+            // Embed everything new, then score it with the imported model.
+            ml::embed::embed_pending(&app).await?;
+            db::rescore(&app.pool).await?;
             Ok(())
         }
     }
