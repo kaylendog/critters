@@ -1,4 +1,7 @@
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+mod db;
+mod sources;
+
+use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
 use anyhow::Context;
 use axum::{Router, routing::get};
@@ -40,21 +43,23 @@ pub struct Config {
     /// Fraction of each species pool, by score, that is eligible for slots.
     #[arg(long, env, default_value_t = 0.5)]
     pub keep_fraction: f64,
-    /// How often to ingest new images from Wikimedia Commons, in hours.
+    /// How often to ingest new images from Wikimedia Commons and iNaturalist,
+    /// in hours.
     #[arg(long, env, default_value_t = 6)]
     pub ingest_interval_hours: u64,
-    /// How many images to fetch per species when seeding the database.
+    /// How many images to fetch per species and per source on each ingest.
     #[arg(long, env, default_value_t = 300)]
     pub seed_per_species: usize,
-    /// Minimum date for images to consider, in YYYY-MM-DD format. Requests for
-    /// images older than this will be ignored.
+    /// Earliest slot date served, in YYYY-MM-DD format. Requests for slots
+    /// before this return 404, so public traffic cannot fill the slots table.
     #[arg(long, env, default_value = "2026-01-01")]
     pub min_slot: NaiveDate,
-    /// Comma-separated licence allowlist. Defaults to CC-BY-SA and CC-BY.
+    /// Comma-separated licence families to accept, e.g. `CC0,CC-BY`. Defaults
+    /// to every family that permits non-commercial redistribution.
     #[arg(long, env, value_delimiter = ',')]
     pub licenses: Option<Vec<String>>,
-    /// The user agent to use when fetching images from Wikimedia Commons.
-    /// Defaults containing the project name and a link to the source code.
+    /// The user agent sent to upstream APIs. Wikimedia asks for contact
+    /// details here. Defaults to the project name and a link to the source.
     #[arg(
         long,
         env,
@@ -119,13 +124,17 @@ async fn main() -> anyhow::Result<()> {
 
     match args.command.unwrap_or(Command::Serve) {
         Command::Serve => serve(app).await,
-        Command::Seed { per_species: _ } => anyhow::bail!("seed: not implemented yet"),
+        Command::Seed { per_species } => {
+            sources::ingest(&app, per_species.unwrap_or(app.config.seed_per_species)).await
+        }
         Command::Train => anyhow::bail!("train: not implemented yet"),
     }
 }
 
 /// Serve the HTTP API and run the ingest timer and webhook scheduler.
 async fn serve(app: App) -> anyhow::Result<()> {
+    tokio::spawn(ingest_loop(app.clone()));
+
     // Setup the HTTP router and start listening for requests.
     let router = Router::new()
         .route("/healthz", get(|| async { "ok" }))
@@ -141,4 +150,20 @@ async fn serve(app: App) -> anyhow::Result<()> {
         })
         .await?;
     Ok(())
+}
+
+/// Ingest on a timer. An empty database is seeded straight away, otherwise the
+/// first run waits a full interval.
+async fn ingest_loop(app: App) {
+    let interval = Duration::from_secs(app.config.ingest_interval_hours * 3600);
+    let empty = db::count_images(&app.pool).await.map(|count| count == 0).unwrap_or(false);
+    if !empty {
+        tokio::time::sleep(interval).await;
+    }
+    loop {
+        if let Err(error) = sources::ingest(&app, app.config.seed_per_species).await {
+            tracing::error!(%error, "ingest failed");
+        }
+        tokio::time::sleep(interval).await;
+    }
 }
