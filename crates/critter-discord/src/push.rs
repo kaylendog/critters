@@ -203,7 +203,7 @@ pub const IS_COMPONENTS_V2: u64 = 1 << 15;
 pub fn message(photo: &Photo, flags: u64) -> serde_json::Value {
     let mut caption =
         vec![format!("[Link]({})", photo.source_url.replace('(', "%28").replace(')', "%29"))];
-    caption.extend(photo.author.as_deref().map(escape));
+    caption.extend(photo.author.as_deref().map(|author| escape(&truncate(author, AUTHOR_LENGTH))));
     caption.push(escape(&photo.license));
     json!({
         "flags": IS_COMPONENTS_V2 | flags,
@@ -218,6 +218,20 @@ pub fn message(photo: &Photo, flags: u64) -> serde_json::Value {
             ],
         }],
     })
+}
+
+/// Longest author shown in a caption, in characters. Some sources put whole
+/// credit lines in the author field.
+const AUTHOR_LENGTH: usize = 32;
+
+/// Cut `text` to at most `limit` characters, ending in `…` when cut.
+fn truncate(text: &str, limit: usize) -> String {
+    let text = text.trim();
+    if text.chars().count() <= limit {
+        return text.into();
+    }
+    let kept: String = text.chars().take(limit - 1).collect();
+    format!("{}…", kept.trim_end())
 }
 
 /// Escape inline Discord markdown, so an author named `_foo_` is not
@@ -296,6 +310,18 @@ mod tests {
             assert_eq!(&icon[8..12], b"WEBP", "{species} is not a WebP");
         }
         assert!(icon("../main").is_none());
+    }
+
+    #[test]
+    fn long_authors_are_cut() {
+        assert_eq!(truncate("Alexis", 32), "Alexis");
+        let exact = "a".repeat(32);
+        assert_eq!(truncate(&exact, 32), exact);
+        let cut = truncate("Bernard Dupont from FRANCE, via the Flickr Commons project", 32);
+        assert_eq!(cut, "Bernard Dupont from FRANCE, via…");
+        assert_eq!(cut.chars().count(), 32);
+        // Characters, not bytes, so accented names are not split mid-letter.
+        assert_eq!(truncate(&"é".repeat(40), 32).chars().count(), 32);
     }
 
     #[test]
