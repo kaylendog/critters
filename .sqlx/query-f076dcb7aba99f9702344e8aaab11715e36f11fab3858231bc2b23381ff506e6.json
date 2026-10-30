@@ -1,0 +1,138 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select species, source, image_url, source_url, author, author_url, license,\n                license_url, width, height\n         from images\n         where id = (select image_id from slots where species = $1 and kind = $2 and starts_at = $3)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "species",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "species"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "source",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "source"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "image_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "image_url"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "source_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "source_url"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "author",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "author"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "author_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "author_url"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "license",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "license"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "license_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "license_url"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "width",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "width"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "height",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "height"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "f076dcb7aba99f9702344e8aaab11715e36f11fab3858231bc2b23381ff506e6"
+}

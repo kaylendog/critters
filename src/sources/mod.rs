@@ -55,6 +55,11 @@ pub const SPECIES: &[Species] = &[
     Species { slug: "fox", commons_query: r#"deepcategory:"Vulpes vulpes""#, inat_taxon: 42069 },
 ];
 
+/// Look up a species by its URL slug.
+pub fn species(slug: &str) -> Option<&'static Species> {
+    SPECIES.iter().find(|species| species.slug == slug)
+}
+
 /// Licence families that permit non-commercial redistribution.
 pub const DEFAULT_LICENSES: &[&str] =
     &["CC0", "PD", "CC-BY", "CC-BY-SA", "CC-BY-NC", "CC-BY-NC-SA"];

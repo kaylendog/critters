@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into slots (species, kind, starts_at, image_id) values ($1, $2, $3, $4)\n         on conflict do nothing",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a4df1276a084b5e864b032ae1924ca64ab5788bbf622add4209538be71476da7"
+}

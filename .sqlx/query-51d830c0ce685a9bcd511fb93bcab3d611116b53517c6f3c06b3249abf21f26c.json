@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into images (species, source, source_id, image_url, source_url, author, author_url,\n                             license, license_url, width, height)\n         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\n         on conflict (source, source_id) do nothing",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "51d830c0ce685a9bcd511fb93bcab3d611116b53517c6f3c06b3249abf21f26c"
+}

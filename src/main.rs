@@ -1,3 +1,4 @@
+mod api;
 mod db;
 mod sources;
 
@@ -103,6 +104,8 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
+    // Load `.env` for local development. A missing file is fine.
+    dotenvy::dotenv().ok();
     let mut args = Args::parse();
 
     // If the admin token is not set, generate a random one and log it.
@@ -138,6 +141,7 @@ async fn serve(app: App) -> anyhow::Result<()> {
     // Setup the HTTP router and start listening for requests.
     let router = Router::new()
         .route("/healthz", get(|| async { "ok" }))
+        .merge(api::router())
         .layer(TraceLayer::new_for_http())
         .with_state(app.clone());
 

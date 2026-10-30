@@ -13,6 +13,8 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # sqlx::query!() checks against the committed `.sqlx/` data instead of a live database.
+  SQLX_OFFLINE: "true"
   # Pinned nightly for rustfmt and clippy. `.rustfmt.toml` uses nightly-only options.
   # Format locally with `cargo +nightly-2026-10-09 fmt`.
   NIGHTLY: nightly-2026-10-09
