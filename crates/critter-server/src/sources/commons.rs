@@ -123,7 +123,7 @@ fn candidate(species: &Species, page: Page) -> Option<Candidate> {
     let license = normalise_license(&meta("License")?);
     let (author, author_url) = match meta("Artist") {
         Some(html) => {
-            let (text, link) = html_text_and_link(&html);
+            let (text, link) = user_link(&html).unwrap_or_else(|| html_text_and_link(&html));
             (Some(text).filter(|text| !text.is_empty()), link)
         }
         None => (None, None),
@@ -155,6 +155,23 @@ fn normalise_license(raw: &str) -> String {
         "cc0" => "CC0-1.0".to_string(),
         other => other.to_ascii_uppercase(),
     }
+}
+
+/// The text and link of the first non-empty link to a `User:` page. Some
+/// `Artist` fields are whole licence templates with the name buried inside,
+/// e.g. `This Photo was taken by <a href="//commons.wikimedia.org/wiki/User:X">
+/// Jane Doe</a>. Feel free to use my photos...`.
+fn user_link(html: &str) -> Option<(String, Option<String>)> {
+    html.match_indices("<a ").find_map(|(start, _)| {
+        let anchor = &html[start..];
+        let anchor = &anchor[..anchor.find("</a>")? + "</a>".len()];
+        let open = &anchor[..anchor.find('>')?];
+        if !open.contains("User:") {
+            return None;
+        }
+        let (text, link) = html_text_and_link(anchor);
+        (!text.is_empty()).then_some((text, link))
+    })
 }
 
 /// Pull the visible text and the first `href` out of a snippet of HTML. The
@@ -199,6 +216,23 @@ fn html_text_and_link(html: &str) -> (String, Option<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn finds_the_name_inside_licence_templates() {
+        let html = r#"<table><tr><td><a href="https://upload.wikimedia.org/x.jpg" title="x.jpg">This Photo</a> was taken by <i><b><a href="//commons.wikimedia.org/wiki/User:Tagooty" title="User:Tagooty">Timothy A. Gonsalves</a></b></i>. Feel free to use my photos, or write on <a href="https://commons.wikimedia.org/w/index.php?title=User_talk:Tagooty">my talk page</a>.</td></tr></table>"#;
+        assert_eq!(
+            user_link(html),
+            Some((
+                "Timothy A. Gonsalves".to_string(),
+                Some("https://commons.wikimedia.org/wiki/User:Tagooty".to_string())
+            ))
+        );
+        // A link with no text, such as an icon, is skipped.
+        let icon = r#"<a href="//commons.wikimedia.org/wiki/User:A"><img src="a.png"></a> <a href="//commons.wikimedia.org/wiki/User:A">Alexis</a>"#;
+        assert_eq!(user_link(icon).map(|(text, _)| text).as_deref(), Some("Alexis"));
+        assert_eq!(user_link("Jane Doe"), None);
+        assert_eq!(user_link(r#"<a href="https://flickr.com/x">Jane</a>"#), None);
+    }
 
     #[test]
     fn extracts_author_text_and_absolute_link() {

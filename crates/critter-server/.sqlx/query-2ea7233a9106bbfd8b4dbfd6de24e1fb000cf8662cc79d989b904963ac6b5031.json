@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into images as i (species, source, source_id, image_url, source_url, author,\n                                    author_url, license, license_url, width, height)\n           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\n           on conflict (source, source_id)\n           do update set author = excluded.author, author_url = excluded.author_url\n           returning (i.xmax = 0) as \"inserted!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "inserted!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2ea7233a9106bbfd8b4dbfd6de24e1fb000cf8662cc79d989b904963ac6b5031"
+}

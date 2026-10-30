@@ -25,13 +25,17 @@ pub struct Image {
 }
 
 /// Insert a candidate image. Returns `true` if it was new, `false` if the same
-/// source id was already present.
+/// source id was already present. An existing image gets its author refreshed,
+/// so parser fixes reach old rows on the next ingest.
 pub async fn insert_image(pool: &PgPool, candidate: &Candidate) -> sqlx::Result<bool> {
-    let result = sqlx::query!(
-        "insert into images (species, source, source_id, image_url, source_url, author, author_url,
-                             license, license_url, width, height)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         on conflict (source, source_id) do nothing",
+    // `xmax = 0` is only true for freshly inserted rows, not updated ones.
+    sqlx::query_scalar!(
+        r#"insert into images as i (species, source, source_id, image_url, source_url, author,
+                                    author_url, license, license_url, width, height)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+           on conflict (source, source_id)
+           do update set author = excluded.author, author_url = excluded.author_url
+           returning (i.xmax = 0) as "inserted!""#,
         candidate.species,
         candidate.source,
         candidate.source_id,
@@ -44,9 +48,8 @@ pub async fn insert_image(pool: &PgPool, candidate: &Candidate) -> sqlx::Result<
         candidate.width,
         candidate.height,
     )
-    .execute(pool)
-    .await?;
-    Ok(result.rows_affected() == 1)
+    .fetch_one(pool)
+    .await
 }
 
 /// Total number of images across all species.
