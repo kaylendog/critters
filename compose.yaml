@@ -1,4 +1,5 @@
-# Dev: `docker compose up -d` gives you Postgres only; run the server with `cargo run`.
+# Dev: `docker compose up -d` gives you Postgres only. Run the binaries with
+# `cargo run -p critter-server` and `cargo run -p critter-discord`.
 # Full stack: `docker compose --profile app up --build`.
 services:
   postgres:
@@ -6,34 +7,56 @@ services:
     environment:
       POSTGRES_USER: critters
       POSTGRES_PASSWORD: critters
-      POSTGRES_DB: critters
+      POSTGRES_DB: critter_server
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # Creates the pushers' databases on first start.
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U critters"]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  app:
+  server:
     profiles: [app]
     build: .
-    image: ghcr.io/kaylendog/daily-critters:latest
+    image: ghcr.io/kaylendog/daily-critters/critter-server:latest
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://critters:critters@postgres/critters
+      DATABASE_URL: postgres://critters:critters@postgres/critter_server
       # Leave unset to have the server generate one and print it in the logs.
-      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
-      USER_AGENT: ${USER_AGENT:-daily-critters (https://github.com/kaylendog/daily-critters)}
-      RUST_LOG: ${RUST_LOG:-daily_critters=info}
+      ADMIN_TOKEN: ${SERVER_ADMIN_TOKEN:-}
+      USER_AGENT: ${USER_AGENT:-critter-server (https://github.com/kaylendog/daily-critters)}
+      RUST_LOG: ${RUST_LOG:-critter_server=info}
     ports:
       - "8080:8080"
     volumes:
       - appdata:/data
+
+  discord:
+    profiles: [app]
+    build:
+      context: .
+      args:
+        BIN: critter-discord
+    image: ghcr.io/kaylendog/daily-critters/critter-discord:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      server:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgres://critters:critters@postgres/critter_discord
+      SERVER_URL: http://server:8080
+      ADMIN_TOKEN: ${DISCORD_ADMIN_TOKEN:-}
+      RUST_LOG: ${RUST_LOG:-critter_discord=info}
+    ports:
+      - "8081:8081"
 
 volumes:
   pgdata:
