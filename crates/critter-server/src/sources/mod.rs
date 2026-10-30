@@ -2,6 +2,7 @@
 
 pub mod commons;
 pub mod inaturalist;
+pub mod openverse;
 
 use crate::{App, db, ml::embed};
 
@@ -39,8 +40,11 @@ pub struct Species {
     /// CirrusSearch query on Wikimedia Commons. `deepcategory:` walks
     /// subcategories.
     pub commons_query: &'static str,
-    /// iNaturalist taxon id.
-    pub inat_taxon: u32,
+    /// Openverse free-text search. `None` skips Openverse for this species.
+    pub openverse_query: Option<&'static str>,
+    /// iNaturalist taxon id. `None` for things iNaturalist has no taxon for,
+    /// such as dog breeds.
+    pub inat_taxon: Option<u32>,
 }
 
 /// Every species we serve.
@@ -49,10 +53,47 @@ pub const SPECIES: &[Species] = &[
         slug: "wolf",
         // The Canis lupus tree includes domestic dogs and dingoes. Leave them out.
         commons_query: r#"deepcategory:"Canis lupus" -deepcategory:"Canis lupus familiaris" -deepcategory:"Dingo""#,
-        inat_taxon: 42048,
+        openverse_query: Some("gray wolf"),
+        inat_taxon: Some(42048),
     },
-    Species { slug: "coyote", commons_query: r#"deepcategory:"Canis latrans""#, inat_taxon: 42051 },
-    Species { slug: "fox", commons_query: r#"deepcategory:"Vulpes vulpes""#, inat_taxon: 42069 },
+    Species {
+        slug: "coyote",
+        commons_query: r#"deepcategory:"Canis latrans""#,
+        openverse_query: Some("coyote"),
+        inat_taxon: Some(42051),
+    },
+    Species {
+        slug: "fox",
+        commons_query: r#"deepcategory:"Vulpes vulpes""#,
+        openverse_query: Some("red fox"),
+        inat_taxon: Some(42069),
+    },
+    Species {
+        slug: "bernese",
+        commons_query: r#"deepcategory:"Bernese Mountain Dog""#,
+        openverse_query: Some("bernese mountain dog"),
+        inat_taxon: None,
+    },
+    Species {
+        slug: "hyena",
+        commons_query: r#"deepcategory:"Crocuta crocuta""#,
+        openverse_query: Some("spotted hyena"),
+        inat_taxon: Some(41886),
+    },
+    Species {
+        slug: "wild-dog",
+        commons_query: r#"deepcategory:"Lycaon pictus""#,
+        openverse_query: Some("african wild dog"),
+        inat_taxon: Some(42093),
+    },
+    Species {
+        slug: "deer",
+        // The whole Cervidae tree is 65k files of antlers, heraldry and venison.
+        // The curated quality images are all real photographs.
+        commons_query: r#"deepcategory:"Quality images of Cervidae""#,
+        openverse_query: Some("deer"),
+        inat_taxon: Some(42158),
+    },
 ];
 
 /// Look up a species by its URL slug.
@@ -95,6 +136,12 @@ pub async fn ingest(app: &App, per_species: usize) -> anyhow::Result<()> {
             Ok(found) => candidates.extend(found),
             Err(error) => tracing::warn!(species = species.slug, %error, "commons fetch failed"),
         }
+        match openverse::fetch(&app.http, species, per_species).await {
+            Ok(found) => candidates.extend(found),
+            Err(error) => {
+                tracing::warn!(species = species.slug, %error, "openverse fetch failed")
+            }
+        }
         match inaturalist::fetch(&app.http, species, per_species).await {
             Ok(found) => candidates.extend(found),
             Err(error) => {
@@ -124,7 +171,12 @@ pub async fn ingest(app: &App, per_species: usize) -> anyhow::Result<()> {
     }
 
     // Embed whatever is new, plus anything a previous pass could not fetch.
+    // Then score the new arrivals, or they cannot qualify for slots until the
+    // next retrain. Rescoring is a no-op without a model.
     let embedded = embed::embed_pending(app).await?;
+    if embedded > 0 {
+        db::rescore(&app.pool).await?;
+    }
     tracing::info!(embedded, "ingest complete");
     Ok(())
 }

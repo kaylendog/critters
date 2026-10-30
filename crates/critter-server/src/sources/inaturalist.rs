@@ -54,7 +54,8 @@ pub async fn fetch(
     species: &Species,
     limit: usize,
 ) -> anyhow::Result<Vec<Candidate>> {
-    let taxon = species.inat_taxon.to_string();
+    let Some(taxon) = species.inat_taxon else { return Ok(Vec::new()) };
+    let taxon = taxon.to_string();
     let mut out = Vec::new();
 
     for page in 1..=MAX_PAGES {

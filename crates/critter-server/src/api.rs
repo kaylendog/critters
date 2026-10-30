@@ -39,6 +39,7 @@ fn photo(image: db::Image, kind: Kind, slot: DateTime<Utc>) -> Photo {
 /// straight to the picture.
 pub fn router() -> Router<App> {
     Router::new()
+        .route("/species", get(species))
         .route("/{species}/{year}/{month}/{day}", get(day))
         .route("/{species}/{year}/{month}/{day}/image", get(day_image))
         .route("/{species}/{year}/{month}/{day}/{hour}", get(hour))
@@ -49,6 +50,11 @@ pub fn router() -> Router<App> {
 type DayPath = Path<(String, i32, u32, u32)>;
 /// Path parameters for an hourly slot.
 type HourPath = Path<(String, i32, u32, u32, u32)>;
+
+/// `GET /species` - the species slugs this server serves.
+async fn species() -> Json<&'static [&'static str]> {
+    Json(critter_types::SPECIES)
+}
 
 /// `GET /{species}/{year}/{month}/{day}` - the day's photo as JSON.
 async fn day(State(app): State<App>, Path((species, y, m, d)): DayPath) -> Response {

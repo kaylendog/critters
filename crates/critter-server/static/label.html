@@ -29,9 +29,7 @@
 <header>
   <label>Token <input id="token" type="password" placeholder="ADMIN_TOKEN" autocomplete="off"></label>
   <label>Species
-    <select id="species">
-      <option>wolf</option><option>coyote</option><option>fox</option>
-    </select>
+    <select id="species"></select>
   </label>
   <button id="skip">Skip</button>
   <button id="train">Train</button>
@@ -55,7 +53,6 @@
   const status = document.getElementById('status');
   const count = document.getElementById('count');
   token.value = localStorage.getItem('token') || '';
-  species.value = localStorage.getItem('species') || 'fox';
   token.addEventListener('change', () => { localStorage.setItem('token', token.value); load(); });
   species.addEventListener('change', () => { localStorage.setItem('species', species.value); load(); });
 
@@ -162,7 +159,16 @@
     else if (key === '2') hide('b');
   });
 
-  load();
+  // The species list comes from the server, so new species need no page change.
+  async function init() {
+    const slugs = await (await fetch('/species')).json();
+    species.replaceChildren(...slugs.map((slug) => new Option(slug)));
+    const saved = localStorage.getItem('species');
+    species.value = slugs.includes(saved) ? saved : slugs[0];
+    load();
+  }
+
+  init();
 </script>
 </body>
 </html>
