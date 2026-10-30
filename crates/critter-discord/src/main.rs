@@ -1,26 +1,14 @@
-mod admin;
 mod db;
+mod interactions;
 mod push;
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::Context;
-use axum::{
-    Router,
-    extract::{Request, State},
-    http::StatusCode,
-    middleware::Next,
-    response::Response,
-    routing::get,
-};
-use axum_extra::{
-    TypedHeader,
-    headers::{Authorization, authorization::Bearer},
-    typed_header::TypedHeaderRejection,
-};
+use axum::{Router, routing::get};
 use clap::Parser;
+use serenity::{all::ApplicationId, http::HttpBuilder, interactions_endpoint::Verifier};
 use sqlx::PgPool;
-use subtle::ConstantTimeEq;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
@@ -40,11 +28,17 @@ pub struct Config {
     /// Postgres connection string for the pusher's own database.
     #[arg(long, env)]
     pub database_url: String,
-    /// Bearer token for `/webhooks`. If unset, this is generated and logged
-    /// on start.
+    /// The Discord application's id, from the Developer Portal.
     #[arg(long, env)]
-    pub admin_token: Option<String>,
-    /// Address to bind the admin HTTP server to.
+    pub discord_application_id: u64,
+    /// The application's public key, in hex. Verifies interaction requests.
+    #[arg(long, env)]
+    pub discord_public_key: String,
+    /// The bot token. Registers commands and creates webhooks.
+    #[arg(long, env)]
+    pub discord_token: String,
+    /// Address to bind the HTTP server to. Discord must reach
+    /// `/interactions` here over public HTTPS.
     #[arg(long, env, default_value = "0.0.0.0:8081")]
     pub bind_addr: SocketAddr,
     /// Base URL of the critter-server to pull photos from.
@@ -71,8 +65,10 @@ pub struct App {
     pub config: Arc<Config>,
     /// HTTP client for talking to the critter-server.
     pub http: reqwest::Client,
-    /// Serenity's HTTP client. Webhooks need no bot token.
+    /// Serenity's HTTP client, authenticated as the bot.
     pub discord: Arc<serenity::http::Http>,
+    /// Checks that interaction requests really come from Discord.
+    pub verifier: Verifier,
 }
 
 #[tokio::main]
@@ -87,15 +83,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Load this crate's `.env` for local development. A missing file is fine.
     dotenvy::from_path(concat!(env!("CARGO_MANIFEST_DIR"), "/.env")).ok();
-    let mut args = Args::parse();
-
-    // If the admin token is not set, generate a random one and log it.
-    if args.config.admin_token.as_deref().is_none_or(str::is_empty) {
-        let token: String =
-            rand::random::<[u8; 32]>().iter().map(|byte| format!("{byte:02x}")).collect();
-        tracing::warn!(%token, "ADMIN_TOKEN was not set, generated a random one");
-        args.config.admin_token = Some(token);
-    }
+    let args = Args::parse();
 
     // Setup the Postgres connection pool and run migrations.
     let pool =
@@ -108,19 +96,21 @@ async fn main() -> anyhow::Result<()> {
         .connect_timeout(Duration::from_secs(5))
         .read_timeout(Duration::from_secs(5))
         .build()?;
-    let app = App {
-        pool,
-        config: Arc::new(args.config),
-        http,
-        discord: Arc::new(serenity::http::Http::new("")),
-    };
+    // Panics on a malformed key, which is fine at startup.
+    let verifier = Verifier::new(&args.config.discord_public_key);
+    let discord = HttpBuilder::new(&args.config.discord_token)
+        .application_id(ApplicationId::new(args.config.discord_application_id))
+        .build();
+    let app =
+        App { pool, config: Arc::new(args.config), http, discord: Arc::new(discord), verifier };
 
+    interactions::register(&app).await.context("registering slash commands")?;
     tokio::spawn(push::scheduler(app.clone()));
 
     // Setup the HTTP router and start listening for requests.
     let router = Router::new()
         .route("/healthz", get(|| async { "ok" }))
-        .merge(admin::router(app.clone()))
+        .merge(interactions::router())
         .layer(TraceLayer::new_for_http())
         .with_state(app.clone());
 
@@ -133,22 +123,4 @@ async fn main() -> anyhow::Result<()> {
         })
         .await?;
     Ok(())
-}
-
-/// Middleware that requires `Authorization: Bearer <ADMIN_TOKEN>`. A missing
-/// or malformed header is a 401 like a wrong token, so the extractor's own
-/// rejection is caught rather than returned as a 400.
-pub async fn require_admin(
-    State(app): State<App>,
-    bearer: Result<TypedHeader<Authorization<Bearer>>, TypedHeaderRejection>,
-    request: Request,
-    next: Next,
-) -> Result<Response, StatusCode> {
-    let expected = app.config.admin_token.as_deref().unwrap_or_default();
-    let presented = bearer.as_ref().map(|header| header.token()).unwrap_or_default();
-    let matches: bool = presented.as_bytes().ct_eq(expected.as_bytes()).into();
-    if expected.is_empty() || !matches {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
-    Ok(next.run(request).await)
 }

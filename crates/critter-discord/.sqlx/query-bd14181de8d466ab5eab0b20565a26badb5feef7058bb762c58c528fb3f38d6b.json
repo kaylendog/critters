@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from webhooks where url = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bd14181de8d466ab5eab0b20565a26badb5feef7058bb762c58c528fb3f38d6b"
+}

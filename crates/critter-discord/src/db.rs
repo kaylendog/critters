@@ -5,13 +5,11 @@
 
 use chrono::{DateTime, Utc};
 use critter_types::Kind;
-use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 /// How often a webhook fires.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cadence {
     Hourly,
     Daily,
@@ -43,53 +41,96 @@ impl Cadence {
     }
 }
 
-/// A webhook registration. `cadence` is stored as text and parsed with
+/// A subscription that is due. `cadence` is stored as text and parsed with
 /// [`Cadence::parse`].
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub struct Webhook {
     pub id: Uuid,
     pub url: String,
     pub species: String,
     pub cadence: String,
-    pub last_fired_slot: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
 }
 
-/// Register a webhook and return the stored row.
+/// Subscribe a channel. Returns `false` if it already had this subscription.
 pub async fn insert_webhook(
     pool: &PgPool,
+    guild: i64,
+    channel: i64,
     url: &str,
     species: &str,
     cadence: Cadence,
-) -> sqlx::Result<Webhook> {
-    sqlx::query_as!(
-        Webhook,
-        "insert into webhooks (id, url, species, cadence) values ($1, $2, $3, $4)
-         returning id, url, species, cadence, last_fired_slot, created_at",
+) -> sqlx::Result<bool> {
+    let result = sqlx::query!(
+        "insert into webhooks (id, guild_id, channel_id, url, species, cadence)
+         values ($1, $2, $3, $4, $5, $6)
+         on conflict (channel_id, species, cadence) do nothing",
         Uuid::new_v4(),
+        guild,
+        channel,
         url,
         species,
         cadence.as_str(),
     )
-    .fetch_one(pool)
-    .await
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected() == 1)
 }
 
-/// Fetch one webhook by id.
-pub async fn get_webhook(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Webhook>> {
-    sqlx::query_as!(
-        Webhook,
-        "select id, url, species, cadence, last_fired_slot, created_at from webhooks where id = $1",
-        id,
+/// The webhook a channel's subscriptions already use, if any.
+pub async fn channel_webhook(pool: &PgPool, channel: i64) -> sqlx::Result<Option<String>> {
+    sqlx::query_scalar!("select url from webhooks where channel_id = $1 limit 1", channel)
+        .fetch_optional(pool)
+        .await
+}
+
+/// Remove one subscription and return its webhook URL, or `None` if the
+/// channel did not have it.
+pub async fn delete_subscription(
+    pool: &PgPool,
+    channel: i64,
+    species: &str,
+    cadence: Cadence,
+) -> sqlx::Result<Option<String>> {
+    sqlx::query_scalar!(
+        "delete from webhooks where channel_id = $1 and species = $2 and cadence = $3
+         returning url",
+        channel,
+        species,
+        cadence.as_str(),
     )
     .fetch_optional(pool)
     .await
 }
 
-/// Delete a webhook. Returns `false` if there was nothing to delete.
-pub async fn delete_webhook(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
-    let result = sqlx::query!("delete from webhooks where id = $1", id).execute(pool).await?;
-    Ok(result.rows_affected() == 1)
+/// Whether any subscription still posts through a webhook.
+pub async fn webhook_in_use(pool: &PgPool, url: &str) -> sqlx::Result<bool> {
+    sqlx::query_scalar!(
+        r#"select exists (select 1 from webhooks where url = $1) as "exists!""#,
+        url
+    )
+    .fetch_one(pool)
+    .await
+}
+
+/// Drop every subscription that posts through a webhook.
+pub async fn delete_webhook_url(pool: &PgPool, url: &str) -> sqlx::Result<()> {
+    sqlx::query!("delete from webhooks where url = $1", url).execute(pool).await?;
+    Ok(())
+}
+
+/// A server's subscriptions as `(channel, species, cadence)`.
+pub async fn guild_subscriptions(
+    pool: &PgPool,
+    guild: i64,
+) -> sqlx::Result<Vec<(i64, String, String)>> {
+    sqlx::query!(
+        "select channel_id, species, cadence from webhooks where guild_id = $1
+         order by channel_id, species, cadence",
+        guild,
+    )
+    .map(|row| (row.channel_id, row.species, row.cadence))
+    .fetch_all(pool)
+    .await
 }
 
 /// Webhooks that have not yet fired for the current slot of their cadence.
@@ -100,7 +141,7 @@ pub async fn due_webhooks(
 ) -> sqlx::Result<Vec<Webhook>> {
     sqlx::query_as!(
         Webhook,
-        "select id, url, species, cadence, last_fired_slot, created_at
+        "select id, url, species, cadence
          from webhooks
          where (cadence = 'hourly' and (last_fired_slot is null or last_fired_slot < $1))
             or (cadence = 'daily' and (last_fired_slot is null or last_fired_slot < $2))

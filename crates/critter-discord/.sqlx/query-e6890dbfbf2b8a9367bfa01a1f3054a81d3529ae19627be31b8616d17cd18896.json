@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select url from webhooks where channel_id = $1 limit 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "webhooks",
+            "name": "url"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e6890dbfbf2b8a9367bfa01a1f3054a81d3529ae19627be31b8616d17cd18896"
+}

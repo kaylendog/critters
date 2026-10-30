@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from webhooks where channel_id = $1 and species = $2 and cadence = $3\n         returning url",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "webhooks",
+            "name": "url"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "606341d6248a3542cee056dfc4f970764ca3ec54390d64449f9d490c1aa72656"
+}

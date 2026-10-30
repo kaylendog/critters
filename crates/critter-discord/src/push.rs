@@ -14,6 +14,7 @@ use serenity::{
 use crate::{
     App,
     db::{self, Cadence},
+    interactions,
 };
 
 /// Check for due webhooks on an interval, forever.
@@ -63,6 +64,12 @@ async fn fire_due(app: &App) -> anyhow::Result<()> {
                 tracing::info!(id = %webhook.id, %slot, "webhook delivered");
                 db::mark_fired(&app.pool, webhook.id, slot).await?;
             }
+            // The webhook was deleted, or the bot was removed with it. Every
+            // subscription sharing it is dead.
+            Err(error) if interactions::status(&error) == Some(404) => {
+                tracing::warn!(id = %webhook.id, "webhook is gone, dropping its subscriptions");
+                db::delete_webhook_url(&app.pool, &webhook.url).await?;
+            }
             Err(error) if is_permanent(&error) => {
                 tracing::warn!(id = %webhook.id, %error, "webhook rejected, skipping slot");
                 db::mark_fired(&app.pool, webhook.id, slot).await?;
@@ -74,7 +81,7 @@ async fn fire_due(app: &App) -> anyhow::Result<()> {
 }
 
 /// GET the slot's photo from the critter-server.
-async fn fetch_photo(
+pub async fn fetch_photo(
     app: &App,
     species: &str,
     kind: Kind,
@@ -98,7 +105,7 @@ async fn post(discord: &Http, url: &str, photo: &Photo) -> serenity::Result<()> 
 
 /// An embed with the photo, a link back to the source page, the author, and
 /// the licence in the footer.
-fn embed(photo: &Photo) -> CreateEmbed {
+pub fn embed(photo: &Photo) -> CreateEmbed {
     let source = match photo.source.as_str() {
         "commons" => "Wikimedia Commons",
         "inaturalist" => "iNaturalist",

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, url, species, cadence, last_fired_slot, created_at\n         from webhooks\n         where (cadence = 'hourly' and (last_fired_slot is null or last_fired_slot < $1))\n            or (cadence = 'daily' and (last_fired_slot is null or last_fired_slot < $2))\n         order by created_at",
+  "query": "select id, url, species, cadence\n         from webhooks\n         where (cadence = 'hourly' and (last_fired_slot is null or last_fired_slot < $1))\n            or (cadence = 'daily' and (last_fired_slot is null or last_fired_slot < $2))\n         order by created_at",
   "describe": {
     "columns": [
       {
@@ -46,28 +46,6 @@
             "name": "cadence"
           }
         }
-      },
-      {
-        "ordinal": 4,
-        "name": "last_fired_slot",
-        "type_info": "Timestamptz",
-        "origin": {
-          "Table": {
-            "table": "webhooks",
-            "name": "last_fired_slot"
-          }
-        }
-      },
-      {
-        "ordinal": 5,
-        "name": "created_at",
-        "type_info": "Timestamptz",
-        "origin": {
-          "Table": {
-            "table": "webhooks",
-            "name": "created_at"
-          }
-        }
       }
     ],
     "parameters": {
@@ -80,10 +58,8 @@
       false,
       false,
       false,
-      false,
-      true,
       false
     ]
   },
-  "hash": "f25dd2b099f6eb5d384855802e111d505c39c478c1ff0daf1fa8bc5705765ee4"
+  "hash": "e64e1e804dee7c396f7c643917cc864eb476e98ac7881602a0983d7fdb3a6001"
 }
