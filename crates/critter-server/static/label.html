@@ -10,9 +10,14 @@
   header { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
   header input, header select, header button { font: inherit; padding: .4rem .6rem; }
   #pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; flex: 1; min-height: 0; }
-  figure { margin: 0; cursor: pointer; display: flex; flex-direction: column; border: 3px solid transparent; border-radius: 8px; overflow: hidden; }
+  figure { margin: 0; cursor: pointer; display: flex; flex-direction: column; border: 3px solid transparent; border-radius: 8px; overflow: hidden; position: relative; }
   figure:hover, figure:focus-visible { border-color: Highlight; outline: none; }
   figure img { width: 100%; height: 70vh; object-fit: contain; background: #0003; }
+  /* While a pair loads the old picture is hidden and a placeholder sits on top,
+     so there is never a moment where a stale image looks like a real choice. */
+  figure.loading { cursor: wait; }
+  figure.loading img { visibility: hidden; }
+  figure.loading::after { content: "Loading…"; position: absolute; inset: 0; display: grid; place-items: center; font-size: 1.2rem; opacity: .6; }
   figcaption { padding: .4rem; font-size: .9rem; opacity: .8; }
   #hide { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
   #hide button { font: inherit; padding: .4rem .6rem; justify-self: center; opacity: .7; }
@@ -65,22 +70,44 @@
     return response.status === 204 ? null : response.json();
   }
 
+  // Resolves once the picture has loaded or failed, so a pair only becomes
+  // pickable when both candidates are actually on screen.
   function show(side, image) {
     const figure = document.getElementById(side);
-    figure.querySelector('img').src = image.image_url;
+    const img = figure.querySelector('img');
     figure.querySelector('figcaption').textContent = image.source_url;
+    return new Promise((resolve) => {
+      img.onload = () => resolve(true);
+      img.onerror = () => resolve(false);
+      img.src = image.image_url;
+    });
+  }
+
+  function setLoading(loading) {
+    for (const figure of document.querySelectorAll('figure')) {
+      figure.classList.toggle('loading', loading);
+      if (loading) {
+        figure.querySelector('img').removeAttribute('src');
+        figure.querySelector('figcaption').textContent = '';
+      }
+    }
   }
 
   async function load() {
+    // Drop the old pair immediately so clicks during the swap do nothing.
+    current = null;
     status.textContent = '';
+    setLoading(true);
     try {
-      current = await api(`/label/pair?species=${encodeURIComponent(species.value)}`);
-      show('a', current.a);
-      show('b', current.b);
-      count.textContent = current.pairs;
+      const pair = await api(`/label/pair?species=${encodeURIComponent(species.value)}`);
+      const [a, b] = await Promise.all([show('a', pair.a), show('b', pair.b)]);
+      if (!a || !b) status.textContent = 'An image failed to load. Skip, or hide it.';
+      current = pair;
+      count.textContent = pair.pairs;
     } catch (error) {
-      current = null;
       status.textContent = error.message === '401 Unauthorized' ? 'Enter the admin token.' : `Could not load a pair: ${error.message}`;
+    } finally {
+      setLoading(false);
     }
   }
 
