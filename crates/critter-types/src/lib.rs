@@ -18,6 +18,24 @@ pub const SPECIES: &[&str] = &[
     "crested-gecko",
 ];
 
+/// Plural display name of a species, e.g. `African Wild Dogs`. `None` for an
+/// unknown slug.
+pub fn plural(species: &str) -> Option<&'static str> {
+    Some(match species {
+        "wolf" => "Wolves",
+        "coyote" => "Coyotes",
+        "fox" => "Foxes",
+        "bernese" => "Bernese Mountain Dogs",
+        "hyena" => "Spotted Hyenas",
+        "wild-dog" => "African Wild Dogs",
+        "deer" => "Deer",
+        "bearded-dragon" => "Bearded Dragons",
+        "leopard-gecko" => "Leopard Geckos",
+        "crested-gecko" => "Crested Geckos",
+        _ => return None,
+    })
+}
+
 /// Granularity of a slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -78,6 +96,13 @@ mod tests {
     use chrono::TimeZone;
 
     use super::*;
+
+    #[test]
+    fn every_species_has_a_plural() {
+        for species in SPECIES {
+            assert!(plural(species).is_some(), "{species} has no plural");
+        }
+    }
 
     #[test]
     fn slot_containing_truncates() {

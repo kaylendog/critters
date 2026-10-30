@@ -128,12 +128,27 @@ pub async fn post(app: &App, url: &str, photo: &Photo) -> reqwest::Result<()> {
     app.http
         .post(url)
         .query(&[("with_components", "true")])
-        .json(&message(photo, 0))
+        .json(&webhook_message(photo))
         .send()
         .await
         .and_then(reqwest::Response::error_for_status)
         .map_err(reqwest::Error::without_url)?;
     Ok(())
+}
+
+/// [`message`], posted as e.g. `Hourly Wolves` with the photo as the avatar.
+/// Every subscription in a channel shares one webhook, so the name and avatar
+/// are set per message rather than on the webhook.
+fn webhook_message(photo: &Photo) -> serde_json::Value {
+    let cadence = match photo.kind {
+        Kind::Hour => "Hourly",
+        Kind::Day => "Daily",
+    };
+    let name = critter_types::plural(&photo.species).unwrap_or(&photo.species);
+    let mut message = message(photo, 0);
+    message["username"] = json!(format!("{cadence} {name}"));
+    message["avatar_url"] = json!(photo.image_url);
+    message
 }
 
 /// Marks a message as using Components V2. Content and embeds are then
@@ -219,6 +234,16 @@ mod tests {
                 }],
             })
         );
+    }
+
+    #[test]
+    fn webhook_posts_as_the_species_and_cadence() {
+        let message = webhook_message(&fox());
+        assert_eq!(message["username"], "Hourly Foxes");
+        assert_eq!(message["avatar_url"], "https://upload.wikimedia.org/fox.jpg");
+
+        let dogs = Photo { species: "wild-dog".into(), kind: Kind::Day, ..fox() };
+        assert_eq!(webhook_message(&dogs)["username"], "Daily African Wild Dogs");
     }
 
     #[test]
