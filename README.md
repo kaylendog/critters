@@ -30,7 +30,7 @@ Each binary has its own Postgres database.
 ## Species
 
 `wolf`, `coyote`, `fox`, `bernese`, `hyena`, `wild-dog`, `deer`,
-`bearded-dragon`, `leopard-gecko`, `crested-gecko`.
+`bearded-dragon`, `leopard-gecko`, `crested-gecko`, `snow-leopard`.
 
 ## Running it
 

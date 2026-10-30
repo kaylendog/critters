@@ -16,6 +16,7 @@ pub const SPECIES: &[&str] = &[
     "bearded-dragon",
     "leopard-gecko",
     "crested-gecko",
+    "snow-leopard",
 ];
 
 /// Plural display name of a species, e.g. `African Wild Dogs`. `None` for an
@@ -32,6 +33,7 @@ pub fn plural(species: &str) -> Option<&'static str> {
         "bearded-dragon" => "Bearded Dragons",
         "leopard-gecko" => "Leopard Geckos",
         "crested-gecko" => "Crested Geckos",
+        "snow-leopard" => "Snow Leopards",
         _ => return None,
     })
 }

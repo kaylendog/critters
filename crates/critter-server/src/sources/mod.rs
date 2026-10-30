@@ -114,6 +114,12 @@ pub const SPECIES: &[Species] = &[
         openverse_query: Some("crested gecko"),
         inat_taxon: Some(200209),
     },
+    Species {
+        slug: "snow-leopard",
+        commons_query: r#"deepcategory:"Panthera uncia""#,
+        openverse_query: Some("snow leopard"),
+        inat_taxon: Some(74831),
+    },
 ];
 
 /// Look up a species by its URL slug.

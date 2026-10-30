@@ -179,7 +179,8 @@ pub fn icon(species: &str) -> Option<&'static [u8]> {
         "deer",
         "bearded-dragon",
         "leopard-gecko",
-        "crested-gecko"
+        "crested-gecko",
+        "snow-leopard"
     )
 }
 
