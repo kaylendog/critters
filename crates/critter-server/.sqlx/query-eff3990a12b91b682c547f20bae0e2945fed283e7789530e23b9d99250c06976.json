@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update images set hidden = true where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eff3990a12b91b682c547f20bae0e2945fed283e7789530e23b9d99250c06976"
+}

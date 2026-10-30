@@ -14,6 +14,8 @@
   figure:hover, figure:focus-visible { border-color: Highlight; outline: none; }
   figure img { width: 100%; height: 70vh; object-fit: contain; background: #0003; }
   figcaption { padding: .4rem; font-size: .9rem; opacity: .8; }
+  #hide { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  #hide button { font: inherit; padding: .4rem .6rem; justify-self: center; opacity: .7; }
   #status { min-height: 1.5rem; opacity: .8; }
   kbd { border: 1px solid currentColor; border-radius: 3px; padding: 0 .3rem; font-size: .85em; }
 </style>
@@ -29,11 +31,15 @@
   <button id="skip">Skip</button>
   <button id="train">Train</button>
   <span>Pairs: <strong id="count">–</strong></span>
-  <span>Pick the better photo. <kbd>A</kbd>/<kbd>←</kbd> left, <kbd>B</kbd>/<kbd>→</kbd> right, <kbd>S</kbd> skip.</span>
+  <span>Pick the better photo. <kbd>A</kbd>/<kbd>←</kbd> left, <kbd>B</kbd>/<kbd>→</kbd> right, <kbd>S</kbd> skip, <kbd>1</kbd>/<kbd>2</kbd> never show.</span>
 </header>
 <section id="pair">
   <figure id="a" tabindex="0"><img alt="Candidate A"><figcaption></figcaption></figure>
   <figure id="b" tabindex="0"><img alt="Candidate B"><figcaption></figcaption></figure>
+</section>
+<section id="hide">
+  <button data-side="a">Never show left</button>
+  <button data-side="b">Never show right</button>
 </section>
 <p id="status"></p>
 <script>
@@ -89,6 +95,19 @@
     }
   }
 
+  // Hidden images never appear in slots or pairs again. No confirmation, since
+  // the worst case is one fewer photo in the pool.
+  async function hide(side) {
+    if (!current) return;
+    try {
+      await api('/label/hide', { method: 'POST', body: JSON.stringify({ id: current[side].id }) });
+      status.textContent = `Hidden #${current[side].id}.`;
+      await load();
+    } catch (error) {
+      status.textContent = `Could not hide: ${error.message}`;
+    }
+  }
+
   async function train() {
     status.textContent = 'Training…';
     try {
@@ -103,6 +122,7 @@
   document.getElementById('a').addEventListener('click', () => pick('a'));
   document.getElementById('b').addEventListener('click', () => pick('b'));
   document.getElementById('skip').addEventListener('click', load);
+  document.querySelectorAll('#hide button').forEach((button) => button.addEventListener('click', () => hide(button.dataset.side)));
   document.getElementById('train').addEventListener('click', train);
   document.addEventListener('keydown', (event) => {
     if (event.target === token) return;
@@ -110,6 +130,8 @@
     if (key === 'a' || key === 'arrowleft') pick('a');
     else if (key === 'b' || key === 'arrowright') pick('b');
     else if (key === 's') load();
+    else if (key === '1') hide('a');
+    else if (key === '2') hide('b');
   });
 
   load();

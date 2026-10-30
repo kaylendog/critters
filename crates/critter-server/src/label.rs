@@ -36,6 +36,12 @@ struct Verdict {
     loser: i64,
 }
 
+/// Body of `POST /label/hide`.
+#[derive(Deserialize)]
+struct Hide {
+    id: i64,
+}
+
 /// Result of `POST /label/train`.
 #[derive(Serialize)]
 struct Trained {
@@ -51,6 +57,7 @@ pub fn router(app: App) -> Router<App> {
     let api = Router::new()
         .route("/label", post(record))
         .route("/label/pair", get(pair))
+        .route("/label/hide", post(hide))
         .route("/label/train", post(train))
         .route_layer(middleware::from_fn_with_state(app, require_admin));
     Router::new().route("/label", get(page)).merge(api)
@@ -88,6 +95,16 @@ async fn record(State(app): State<App>, Json(verdict): Json<Verdict>) -> StatusC
         Err(sqlx::Error::Database(error)) if error.is_foreign_key_violation() => {
             StatusCode::UNPROCESSABLE_ENTITY
         }
+        Err(error) => internal(error),
+    }
+}
+
+/// `POST /label/hide` - never serve this image again. 404 if it does not
+/// exist.
+async fn hide(State(app): State<App>, Json(hide): Json<Hide>) -> StatusCode {
+    match db::hide_image(&app.pool, hide.id).await {
+        Ok(true) => StatusCode::NO_CONTENT,
+        Ok(false) => StatusCode::NOT_FOUND,
         Err(error) => internal(error),
     }
 }

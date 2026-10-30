@@ -90,7 +90,7 @@ pub async fn random_pair(
     let mut rows = sqlx::query_as!(
         LabelImage,
         "select id, image_url, source_url from images
-         where species = $1 and embedding is not null
+         where species = $1 and embedding is not null and not hidden
          order by random() limit 2",
         species,
     )
@@ -100,6 +100,18 @@ pub async fn random_pair(
         (Some(b), Some(a)) => Some((a, b)),
         _ => None,
     })
+}
+
+/// Never serve an image again, whatever its score. Any slot already pinned to
+/// it is unpinned so a repeat request picks something else. Returns `false`
+/// if the id does not exist.
+pub async fn hide_image(pool: &PgPool, id: i64) -> sqlx::Result<bool> {
+    let mut tx = pool.begin().await?;
+    let result =
+        sqlx::query!("update images set hidden = true where id = $1", id).execute(&mut *tx).await?;
+    sqlx::query!("delete from slots where image_id = $1", id).execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(result.rows_affected() == 1)
 }
 
 /// Record that one image beat another.
@@ -190,6 +202,7 @@ pub async fn eligible_ids(
     sqlx::query_scalar!(
         "select id from images
          where species = $1
+           and not hidden
            and case when exists (select 1 from model)
                then score >= (select percentile_cont(1 - $2::float8) within group (order by score)
                               from images where species = $1 and score is not null)

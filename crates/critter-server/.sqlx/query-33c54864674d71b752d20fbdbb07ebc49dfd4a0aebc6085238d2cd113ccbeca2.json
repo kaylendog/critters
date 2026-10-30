@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select id from images\n         where species = $1\n           and not hidden\n           and case when exists (select 1 from model)\n               then score >= (select percentile_cont(1 - $2::float8) within group (order by score)\n                              from images where species = $1 and score is not null)\n               else true end\n         order by id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "33c54864674d71b752d20fbdbb07ebc49dfd4a0aebc6085238d2cd113ccbeca2"
+}

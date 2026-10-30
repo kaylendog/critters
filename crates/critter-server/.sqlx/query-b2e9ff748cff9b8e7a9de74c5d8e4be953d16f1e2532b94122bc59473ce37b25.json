@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, image_url, source_url from images\n         where species = $1 and embedding is not null\n         order by random() limit 2",
+  "query": "select id, image_url, source_url from images\n         where species = $1 and embedding is not null and not hidden\n         order by random() limit 2",
   "describe": {
     "columns": [
       {
@@ -48,5 +48,5 @@
       false
     ]
   },
-  "hash": "2d5d4cd3fd87a4d05d51f75231af78e59f1d6c984636f01200c917730c126834"
+  "hash": "b2e9ff748cff9b8e7a9de74c5d8e4be953d16f1e2532b94122bc59473ce37b25"
 }
