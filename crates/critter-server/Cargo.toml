@@ -1,6 +1,6 @@
 [package]
 name = "critter-server"
-description = "Hourly and daily photos of wolves, coyotes and foxes, filtered by your own taste."
+description = "Hourly and daily critter photos, filtered by your own taste."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

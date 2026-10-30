@@ -1,6 +1,6 @@
 [package]
 name = "critter-discord"
-description = "Pushes each slot's critter photo from a critter-server to Discord webhooks."
+description = "Discord bot that posts a critter-server's photos to subscribed channels."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
