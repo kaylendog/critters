@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select (not i.hidden and coalesce(\n                     case when exists (select 1 from model)\n                          then i.score >= (select percentile_cont(1 - $2::float8) within group (order by score)\n                                           from images where species = i.species and score is not null)\n                          else true end,\n                     false)) as \"eligible!\"\n           from images i where i.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "eligible!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "ee0946e2d19e478b5409b8f188ad5c7227d1b0dd0f8313652bedd378de260fe4"
+}

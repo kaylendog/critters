@@ -119,7 +119,15 @@ const HIDE_LOSSES: i64 = 5;
 /// `opponent` it was shown beside, and to a handful of random past winners of
 /// the same species. A handful rather than all of them, so one hide cannot
 /// outweigh hundreds of real verdicts.
-pub async fn hide_image(pool: &PgPool, id: i64, opponent: Option<i64>) -> sqlx::Result<bool> {
+///
+/// With `validation`, the loss to `opponent` is a validation pair and the
+/// synthetic losses are skipped, so nothing reaches training.
+pub async fn hide_image(
+    pool: &PgPool,
+    id: i64,
+    opponent: Option<i64>,
+    validation: bool,
+) -> sqlx::Result<bool> {
     let mut tx = pool.begin().await?;
     let result =
         sqlx::query!("update images set hidden = true where id = $1", id).execute(&mut *tx).await?;
@@ -129,9 +137,18 @@ pub async fn hide_image(pool: &PgPool, id: i64, opponent: Option<i64>) -> sqlx::
     sqlx::query!("delete from slots where image_id = $1", id).execute(&mut *tx).await?;
 
     if let Some(opponent) = opponent.filter(|opponent| *opponent != id) {
-        sqlx::query!("insert into pairs (winner_id, loser_id) values ($1, $2)", opponent, id)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query!(
+            "insert into pairs (winner_id, loser_id, validation) values ($1, $2, $3)",
+            opponent,
+            id,
+            validation,
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
+    if validation {
+        tx.commit().await?;
+        return Ok(true);
     }
     sqlx::query!(
         "insert into pairs (winner_id, loser_id)
@@ -150,6 +167,24 @@ pub async fn hide_image(pool: &PgPool, id: i64, opponent: Option<i64>) -> sqlx::
 
     tx.commit().await?;
     Ok(true)
+}
+
+/// Whether an image currently qualifies for slots, by the same rule as
+/// [`eligible_ids`]. `None` if the id does not exist.
+pub async fn is_eligible(pool: &PgPool, id: i64, keep_fraction: f64) -> sqlx::Result<Option<bool>> {
+    sqlx::query_scalar!(
+        r#"select (not i.hidden and coalesce(
+                     case when exists (select 1 from model)
+                          then i.score >= (select percentile_cont(1 - $2::float8) within group (order by score)
+                                           from images where species = i.species and score is not null)
+                          else true end,
+                     false)) as "eligible!"
+           from images i where i.id = $1"#,
+        id,
+        keep_fraction,
+    )
+    .fetch_optional(pool)
+    .await
 }
 
 /// One row of the ranking page.

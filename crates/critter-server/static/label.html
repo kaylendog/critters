@@ -190,13 +190,21 @@
     const pair = current;
     current = null;
     try {
+      const validation = validate.checked;
       const targets = side === 'both'
         ? [{ id: pair.a.id }, { id: pair.b.id }]
         : [{ id: pair[side].id, opponent: pair[side === 'a' ? 'b' : 'a'].id }];
-      for (const body of targets) {
-        await api('/label/hide', { method: 'POST', body: JSON.stringify(body) });
+      // In validation mode, say whether the model would have served each one.
+      // "Would have served" is the failure validation is there to catch.
+      const verdicts = [];
+      for (const target of targets) {
+        const result = await api('/label/hide', { method: 'POST', body: JSON.stringify({ ...target, validation }) });
+        verdicts.push(`#${target.id} ${result.was_eligible ? 'would have been served' : 'was already below the cutoff'}`);
       }
-      status.textContent = `Hidden ${targets.map((target) => `#${target.id}`).join(' and ')}.`;
+      status.textContent = validation
+        ? `Hidden. ${verdicts.join(', ')}.`
+        : `Hidden ${targets.map((target) => `#${target.id}`).join(' and ')}.`;
+      if (validation) await new Promise((resolve) => setTimeout(resolve, 1500));
       await load();
     } catch (error) {
       current = pair;

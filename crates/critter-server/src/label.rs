@@ -68,6 +68,17 @@ struct Hide {
     id: i64,
     /// The image shown beside it, recorded as a win over the hidden one.
     opponent: Option<i64>,
+    /// Record the loss as a validation pair and add nothing to training.
+    #[serde(default)]
+    validation: bool,
+}
+
+/// Result of `POST /label/hide`.
+#[derive(Serialize)]
+struct Hidden {
+    /// Whether the model would have served the image before it was hidden.
+    /// This is the failure validation exists to catch.
+    was_eligible: bool,
 }
 
 /// Result of `POST /label/train`.
@@ -200,13 +211,15 @@ async fn validation_stats(app: &App) -> Result<ValidationStats, StatusCode> {
 }
 
 /// `POST /label/hide` - never serve this image again, and record it as a
-/// loss for the ranker. 404 if it does not exist.
-async fn hide(State(app): State<App>, Json(hide): Json<Hide>) -> StatusCode {
-    match db::hide_image(&app.pool, hide.id, hide.opponent).await {
-        Ok(true) => StatusCode::NO_CONTENT,
-        Ok(false) => StatusCode::NOT_FOUND,
-        Err(error) => internal(error),
-    }
+/// loss. Reports whether the model would have served it. 404 if it does not
+/// exist.
+async fn hide(State(app): State<App>, Json(hide): Json<Hide>) -> Result<Json<Hidden>, StatusCode> {
+    let was_eligible = db::is_eligible(&app.pool, hide.id, app.config.keep_fraction)
+        .await
+        .map_err(internal)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    db::hide_image(&app.pool, hide.id, hide.opponent, hide.validation).await.map_err(internal)?;
+    Ok(Json(Hidden { was_eligible }))
 }
 
 /// `POST /label/train` - retrain the ranker and rescore every image.
