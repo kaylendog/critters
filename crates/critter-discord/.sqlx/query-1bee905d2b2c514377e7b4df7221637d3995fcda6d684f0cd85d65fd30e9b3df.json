@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update webhooks set last_fired_slot = $2 where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1bee905d2b2c514377e7b4df7221637d3995fcda6d684f0cd85d65fd30e9b3df"
+}
