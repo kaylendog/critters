@@ -1,14 +1,29 @@
 mod api;
 mod db;
+mod label;
+mod ml;
 mod sources;
 
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
 use anyhow::Context;
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    extract::{Request, State},
+    http::StatusCode,
+    middleware::Next,
+    response::Response,
+    routing::get,
+};
+use axum_extra::{
+    TypedHeader,
+    headers::{Authorization, authorization::Bearer},
+    typed_header::TypedHeaderRejection,
+};
 use chrono::NaiveDate;
 use clap::{Parser, Subcommand};
 use sqlx::PgPool;
+use subtle::ConstantTimeEq;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
@@ -130,7 +145,11 @@ async fn main() -> anyhow::Result<()> {
         Command::Seed { per_species } => {
             sources::ingest(&app, per_species.unwrap_or(app.config.seed_per_species)).await
         }
-        Command::Train => anyhow::bail!("train: not implemented yet"),
+        Command::Train => {
+            let pairs = ml::rank::retrain(&app).await?;
+            println!("trained on {pairs} pairs");
+            Ok(())
+        }
     }
 }
 
@@ -142,6 +161,7 @@ async fn serve(app: App) -> anyhow::Result<()> {
     let router = Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .merge(api::router())
+        .merge(label::router(app.clone()))
         .layer(TraceLayer::new_for_http())
         .with_state(app.clone());
 
@@ -154,6 +174,24 @@ async fn serve(app: App) -> anyhow::Result<()> {
         })
         .await?;
     Ok(())
+}
+
+/// Middleware that requires `Authorization: Bearer <ADMIN_TOKEN>`. A missing
+/// or malformed header is a 401 like a wrong token, so the extractor's own
+/// rejection is caught rather than returned as a 400.
+pub async fn require_admin(
+    State(app): State<App>,
+    bearer: Result<TypedHeader<Authorization<Bearer>>, TypedHeaderRejection>,
+    request: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let expected = app.config.admin_token.as_deref().unwrap_or_default();
+    let presented = bearer.as_ref().map(|header| header.token()).unwrap_or_default();
+    let matches: bool = presented.as_bytes().ct_eq(expected.as_bytes()).into();
+    if expected.is_empty() || !matches {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    Ok(next.run(request).await)
 }
 
 /// Ingest on a timer. An empty database is seeded straight away, otherwise the

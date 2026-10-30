@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update images\n         set score = (select sum(e * w) from unnest(images.embedding, model.weights) as t(e, w))\n         from model\n         where images.embedding is not null",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "bcd510273d682668752155f8ba1864a90b8af5744adfcb7497dcf5e7fe079c93"
+}

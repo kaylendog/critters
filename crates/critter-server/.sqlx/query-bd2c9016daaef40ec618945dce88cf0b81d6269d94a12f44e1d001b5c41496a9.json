@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select w.embedding as \"winner!\", l.embedding as \"loser!\"\n           from pairs p\n           join images w on w.id = p.winner_id\n           join images l on l.id = p.loser_id\n           where w.embedding is not null and l.embedding is not null",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "winner!",
+        "type_info": "Float4Array",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "embedding"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "loser!",
+        "type_info": "Float4Array",
+        "origin": {
+          "Table": {
+            "table": "images",
+            "name": "embedding"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "bd2c9016daaef40ec618945dce88cf0b81d6269d94a12f44e1d001b5c41496a9"
+}

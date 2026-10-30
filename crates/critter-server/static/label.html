@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Critter labelling</title>
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  body { margin: 0; padding: 1rem; display: flex; flex-direction: column; gap: 1rem; min-height: 100vh; box-sizing: border-box; }
+  header { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+  header input, header select, header button { font: inherit; padding: .4rem .6rem; }
+  #pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; flex: 1; min-height: 0; }
+  figure { margin: 0; cursor: pointer; display: flex; flex-direction: column; border: 3px solid transparent; border-radius: 8px; overflow: hidden; }
+  figure:hover, figure:focus-visible { border-color: Highlight; outline: none; }
+  figure img { width: 100%; height: 70vh; object-fit: contain; background: #0003; }
+  figcaption { padding: .4rem; font-size: .9rem; opacity: .8; }
+  #status { min-height: 1.5rem; opacity: .8; }
+  kbd { border: 1px solid currentColor; border-radius: 3px; padding: 0 .3rem; font-size: .85em; }
+</style>
+</head>
+<body>
+<header>
+  <label>Token <input id="token" type="password" placeholder="ADMIN_TOKEN" autocomplete="off"></label>
+  <label>Species
+    <select id="species">
+      <option>wolf</option><option>coyote</option><option>fox</option>
+    </select>
+  </label>
+  <button id="skip">Skip</button>
+  <button id="train">Train</button>
+  <span>Pairs: <strong id="count">–</strong></span>
+  <span>Pick the better photo. <kbd>A</kbd>/<kbd>←</kbd> left, <kbd>B</kbd>/<kbd>→</kbd> right, <kbd>S</kbd> skip.</span>
+</header>
+<section id="pair">
+  <figure id="a" tabindex="0"><img alt="Candidate A"><figcaption></figcaption></figure>
+  <figure id="b" tabindex="0"><img alt="Candidate B"><figcaption></figcaption></figure>
+</section>
+<p id="status"></p>
+<script>
+  // Token and species persist across reloads. The token only ever goes to
+  // this origin as a bearer header.
+  const token = document.getElementById('token');
+  const species = document.getElementById('species');
+  const status = document.getElementById('status');
+  const count = document.getElementById('count');
+  token.value = localStorage.getItem('token') || '';
+  species.value = localStorage.getItem('species') || 'fox';
+  token.addEventListener('change', () => { localStorage.setItem('token', token.value); load(); });
+  species.addEventListener('change', () => { localStorage.setItem('species', species.value); load(); });
+
+  let current = null;
+
+  async function api(path, options = {}) {
+    const response = await fetch(path, {
+      ...options,
+      headers: { 'Authorization': `Bearer ${token.value}`, 'Content-Type': 'application/json', ...options.headers },
+    });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    return response.status === 204 ? null : response.json();
+  }
+
+  function show(side, image) {
+    const figure = document.getElementById(side);
+    figure.querySelector('img').src = image.image_url;
+    figure.querySelector('figcaption').textContent = image.source_url;
+  }
+
+  async function load() {
+    status.textContent = '';
+    try {
+      current = await api(`/label/pair?species=${encodeURIComponent(species.value)}`);
+      show('a', current.a);
+      show('b', current.b);
+      count.textContent = current.pairs;
+    } catch (error) {
+      current = null;
+      status.textContent = error.message === '401 Unauthorized' ? 'Enter the admin token.' : `Could not load a pair: ${error.message}`;
+    }
+  }
+
+  async function pick(winner) {
+    if (!current) return;
+    const loser = winner === 'a' ? 'b' : 'a';
+    try {
+      await api('/label', { method: 'POST', body: JSON.stringify({ winner: current[winner].id, loser: current[loser].id }) });
+      await load();
+    } catch (error) {
+      status.textContent = `Could not save: ${error.message}`;
+    }
+  }
+
+  async function train() {
+    status.textContent = 'Training…';
+    try {
+      const result = await api('/label/train', { method: 'POST' });
+      const eligible = Object.entries(result.eligible).map(([k, v]) => `${k} ${v}`).join(', ');
+      status.textContent = `Trained on ${result.pairs} pairs. Eligible: ${eligible}.`;
+    } catch (error) {
+      status.textContent = `Training failed: ${error.message}`;
+    }
+  }
+
+  document.getElementById('a').addEventListener('click', () => pick('a'));
+  document.getElementById('b').addEventListener('click', () => pick('b'));
+  document.getElementById('skip').addEventListener('click', load);
+  document.getElementById('train').addEventListener('click', train);
+  document.addEventListener('keydown', (event) => {
+    if (event.target === token) return;
+    const key = event.key.toLowerCase();
+    if (key === 'a' || key === 'arrowleft') pick('a');
+    else if (key === 'b' || key === 'arrowright') pick('b');
+    else if (key === 's') load();
+  });
+
+  load();
+</script>
+</body>
+</html>

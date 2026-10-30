@@ -3,7 +3,7 @@
 pub mod commons;
 pub mod inaturalist;
 
-use crate::{App, db};
+use crate::{App, db, ml::embed};
 
 /// An image found upstream that may be inserted into the `images` table.
 #[derive(Debug, Clone, PartialEq)]
@@ -122,6 +122,10 @@ pub async fn ingest(app: &App, per_species: usize) -> anyhow::Result<()> {
         }
         tracing::info!(species = species.slug, inserted, rejected, "ingested");
     }
+
+    // Embed whatever is new, plus anything a previous pass could not fetch.
+    let embedded = embed::embed_pending(app).await?;
+    tracing::info!(embedded, "ingest complete");
     Ok(())
 }
 

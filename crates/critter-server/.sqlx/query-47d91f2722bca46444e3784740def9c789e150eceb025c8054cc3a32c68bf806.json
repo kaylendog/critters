@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update images set embedding = $2 where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Float4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "47d91f2722bca46444e3784740def9c789e150eceb025c8054cc3a32c68bf806"
+}
