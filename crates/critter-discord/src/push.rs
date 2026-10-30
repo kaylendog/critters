@@ -3,6 +3,7 @@
 
 use std::time::Duration;
 
+use axum::{extract::Path, http::header, response::IntoResponse};
 use chrono::{DateTime, NaiveTime, TimeDelta, TimeZone, Utc};
 use chrono_tz::Tz;
 use critter_types::{Kind, Photo};
@@ -128,7 +129,7 @@ pub async fn post(app: &App, url: &str, photo: &Photo) -> reqwest::Result<()> {
     app.http
         .post(url)
         .query(&[("with_components", "true")])
-        .json(&webhook_message(photo))
+        .json(&webhook_message(photo, app.config.public_url.as_deref()))
         .send()
         .await
         .and_then(reqwest::Response::error_for_status)
@@ -136,10 +137,12 @@ pub async fn post(app: &App, url: &str, photo: &Photo) -> reqwest::Result<()> {
     Ok(())
 }
 
-/// [`message`], posted as e.g. `Hourly Wolves` with the photo as the avatar.
+/// [`message`], posted as e.g. `Hourly Wolves` with that species' avatar.
 /// Every subscription in a channel shares one webhook, so the name and avatar
 /// are set per message rather than on the webhook.
-fn webhook_message(photo: &Photo) -> serde_json::Value {
+/// `public_url` is where Discord can fetch [`icon`]s. Without it, posts use
+/// the webhook's default avatar.
+fn webhook_message(photo: &Photo, public_url: Option<&str>) -> serde_json::Value {
     let cadence = match photo.kind {
         Kind::Hour => "Hourly",
         Kind::Day => "Daily",
@@ -147,8 +150,47 @@ fn webhook_message(photo: &Photo) -> serde_json::Value {
     let name = critter_types::plural(&photo.species).unwrap_or(&photo.species);
     let mut message = message(photo, 0);
     message["username"] = json!(format!("{cadence} {name}"));
-    message["avatar_url"] = json!(photo.image_url);
+    if let Some(base) = public_url
+        && icon(&photo.species).is_some()
+    {
+        let base = base.trim_end_matches('/');
+        message["avatar_url"] = json!(format!("{base}/avatars/{}.webp", photo.species));
+    }
     message
+}
+
+/// A hand-cropped 256x256 WebP avatar per species, built into the binary.
+pub fn icon(species: &str) -> Option<&'static [u8]> {
+    macro_rules! icons {
+        ($($slug:literal),*) => {
+            match species {
+                $($slug => Some(include_bytes!(concat!("../assets/icons/", $slug, ".webp")).as_slice()),)*
+                _ => None,
+            }
+        };
+    }
+    icons!(
+        "wolf",
+        "coyote",
+        "fox",
+        "bernese",
+        "hyena",
+        "wild-dog",
+        "deer",
+        "bearded-dragon",
+        "leopard-gecko",
+        "crested-gecko"
+    )
+}
+
+/// `GET /avatars/{species}.webp` - a species' avatar. Public, since Discord
+/// fetches it when showing a post. 404 for anything else.
+pub async fn avatar(Path(file): Path<String>) -> Result<impl IntoResponse, StatusCode> {
+    let icon = file.strip_suffix(".webp").and_then(icon).ok_or(StatusCode::NOT_FOUND)?;
+    Ok((
+        [(header::CONTENT_TYPE, "image/webp"), (header::CACHE_CONTROL, "public, max-age=86400")],
+        icon,
+    ))
 }
 
 /// Marks a message as using Components V2. Content and embeds are then
@@ -238,12 +280,22 @@ mod tests {
 
     #[test]
     fn webhook_posts_as_the_species_and_cadence() {
-        let message = webhook_message(&fox());
+        let message = webhook_message(&fox(), Some("https://bot.example/"));
         assert_eq!(message["username"], "Hourly Foxes");
-        assert_eq!(message["avatar_url"], "https://upload.wikimedia.org/fox.jpg");
+        assert_eq!(message["avatar_url"], "https://bot.example/avatars/fox.webp");
+        assert!(webhook_message(&fox(), None)["avatar_url"].is_null());
 
         let dogs = Photo { species: "wild-dog".into(), kind: Kind::Day, ..fox() };
-        assert_eq!(webhook_message(&dogs)["username"], "Daily African Wild Dogs");
+        assert_eq!(webhook_message(&dogs, None)["username"], "Daily African Wild Dogs");
+    }
+
+    #[test]
+    fn every_species_has_a_webp_icon() {
+        for species in critter_types::SPECIES {
+            let icon = icon(species).unwrap_or_else(|| panic!("{species} has no icon"));
+            assert_eq!(&icon[8..12], b"WEBP", "{species} is not a WebP");
+        }
+        assert!(icon("../main").is_none());
     }
 
     #[test]

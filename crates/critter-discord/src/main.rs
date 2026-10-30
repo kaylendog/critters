@@ -44,6 +44,11 @@ pub struct Config {
     /// Base URL of the critter-server to pull photos from.
     #[arg(long, env)]
     pub server_url: String,
+    /// Public HTTPS base URL of this bot, the one Discord sends interactions
+    /// to. Posts use the species icons served here as avatars. Without it,
+    /// posts use the webhook's default avatar.
+    #[arg(long, env)]
+    pub public_url: Option<String>,
     /// How often to check for webhooks that are due, in seconds.
     #[arg(long, env, default_value_t = 60)]
     pub poll_interval_secs: u64,
@@ -110,6 +115,7 @@ async fn main() -> anyhow::Result<()> {
     // Setup the HTTP router and start listening for requests.
     let router = Router::new()
         .route("/healthz", get(|| async { "ok" }))
+        .route("/avatars/{file}", get(push::avatar))
         .merge(interactions::router())
         .layer(TraceLayer::new_for_http())
         .with_state(app.clone());

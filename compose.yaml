@@ -53,6 +53,7 @@ services:
     environment:
       DATABASE_URL: postgres://critters:critters@postgres/critter_discord
       SERVER_URL: http://server:8080
+      PUBLIC_URL: ${DISCORD_PUBLIC_URL:-}
       DISCORD_APPLICATION_ID: ${DISCORD_APPLICATION_ID:-}
       DISCORD_PUBLIC_KEY: ${DISCORD_PUBLIC_KEY:-}
       DISCORD_TOKEN: ${DISCORD_TOKEN:-}

@@ -48,6 +48,7 @@ for local development.
 | `DISCORD_PUBLIC_KEY` | Required | Hex. Verifies that requests come from Discord. |
 | `DISCORD_TOKEN` | Required | Bot token. |
 | `SERVER_URL` | Required | The `critter-server` to pull photos from. |
+| `PUBLIC_URL` | Unset | This bot's public HTTPS address. Posts use the species icons in `assets/icons` as avatars, served from here. Unset means the webhook's default avatar. |
 | `BIND_ADDR` | `0.0.0.0:8081` | Listen address. |
 | `POLL_INTERVAL_SECS` | `60` | How often to look for subscriptions that are due. |
 | `USER_AGENT` | Project URL | Sent to the server. |
