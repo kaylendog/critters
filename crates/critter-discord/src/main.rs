@@ -53,11 +53,7 @@ pub struct Config {
     #[arg(long, env, default_value_t = 60)]
     pub poll_interval_secs: u64,
     /// The user agent sent to the critter-server.
-    #[arg(
-        long,
-        env,
-        default_value = "critter-discord (https://github.com/kaylendog/daily-critters)"
-    )]
+    #[arg(long, env, default_value = "critter-discord (https://github.com/kaylendog/critters)")]
     pub user_agent: String,
 }
 

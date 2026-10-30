@@ -244,16 +244,13 @@ async fn subscribe(
 ) -> anyhow::Result<Value> {
     let url = match db::channel_webhook(&app.pool, channel.get() as i64).await? {
         Some(url) => url,
-        None => {
-            match channel.create_webhook(&*app.discord, CreateWebhook::new("Daily Critters")).await
-            {
-                Ok(webhook) => webhook.url()?,
-                Err(failure) if status(&failure) == Some(403) => {
-                    return Ok(error("I need the Manage Webhooks permission in this channel."));
-                }
-                Err(failure) => return Err(failure.into()),
+        None => match channel.create_webhook(&*app.discord, CreateWebhook::new("Critters")).await {
+            Ok(webhook) => webhook.url()?,
+            Err(failure) if status(&failure) == Some(403) => {
+                return Ok(error("I need the Manage Webhooks permission in this channel."));
             }
-        }
+            Err(failure) => return Err(failure.into()),
+        },
     };
     let subscription = db::NewSubscription { url: &url, ..subscription };
     let species = subscription.species;

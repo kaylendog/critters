@@ -1,4 +1,4 @@
-# daily-critters
+# critters
 
 One critter photo per hour and per day, picked by a ranker trained on your own
 taste. Photos come only from sources with licences that allow non-commercial

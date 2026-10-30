@@ -23,7 +23,7 @@ services:
   server:
     profiles: [app]
     build: .
-    image: ghcr.io/kaylendog/daily-critters/critter-server:latest
+    image: ghcr.io/kaylendog/critters/critter-server:latest
     depends_on:
       postgres:
         condition: service_healthy
@@ -31,7 +31,7 @@ services:
       DATABASE_URL: postgres://critters:critters@postgres/critter_server
       # Leave unset to have the server generate one and print it in the logs.
       ADMIN_TOKEN: ${SERVER_ADMIN_TOKEN:-}
-      USER_AGENT: ${USER_AGENT:-critter-server (https://github.com/kaylendog/daily-critters)}
+      USER_AGENT: ${USER_AGENT:-critter-server (https://github.com/kaylendog/critters)}
       RUST_LOG: ${RUST_LOG:-critter_server=info}
     ports:
       - "8080:8080"
@@ -44,7 +44,7 @@ services:
       context: .
       args:
         BIN: critter-discord
-    image: ghcr.io/kaylendog/daily-critters/critter-discord:latest
+    image: ghcr.io/kaylendog/critters/critter-discord:latest
     depends_on:
       postgres:
         condition: service_healthy

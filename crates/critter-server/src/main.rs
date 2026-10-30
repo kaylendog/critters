@@ -76,11 +76,7 @@ pub struct Config {
     pub licenses: Option<Vec<String>>,
     /// The user agent sent to upstream APIs. Wikimedia asks for contact
     /// details here. Defaults to the project name and a link to the source.
-    #[arg(
-        long,
-        env,
-        default_value = "critter-server (https://github.com/kaylendog/daily-critters)"
-    )]
+    #[arg(long, env, default_value = "critter-server (https://github.com/kaylendog/critters)")]
     pub user_agent: String,
 }
 
