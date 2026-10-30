@@ -40,6 +40,8 @@ struct Verdict {
 #[derive(Deserialize)]
 struct Hide {
     id: i64,
+    /// The image shown beside it, recorded as a win over the hidden one.
+    opponent: Option<i64>,
 }
 
 /// Result of `POST /label/train`.
@@ -99,10 +101,10 @@ async fn record(State(app): State<App>, Json(verdict): Json<Verdict>) -> StatusC
     }
 }
 
-/// `POST /label/hide` - never serve this image again. 404 if it does not
-/// exist.
+/// `POST /label/hide` - never serve this image again, and record it as a
+/// loss for the ranker. 404 if it does not exist.
 async fn hide(State(app): State<App>, Json(hide): Json<Hide>) -> StatusCode {
-    match db::hide_image(&app.pool, hide.id).await {
+    match db::hide_image(&app.pool, hide.id, hide.opponent).await {
         Ok(true) => StatusCode::NO_CONTENT,
         Ok(false) => StatusCode::NOT_FOUND,
         Err(error) => internal(error),

@@ -102,16 +102,48 @@ pub async fn random_pair(
     })
 }
 
+/// How many past winners a hidden image is recorded as losing to.
+const HIDE_LOSSES: i64 = 5;
+
 /// Never serve an image again, whatever its score. Any slot already pinned to
 /// it is unpinned so a repeat request picks something else. Returns `false`
 /// if the id does not exist.
-pub async fn hide_image(pool: &PgPool, id: i64) -> sqlx::Result<bool> {
+///
+/// Hiding also teaches the ranker. The image is recorded as losing to the
+/// `opponent` it was shown beside, and to a handful of random past winners of
+/// the same species. A handful rather than all of them, so one hide cannot
+/// outweigh hundreds of real verdicts.
+pub async fn hide_image(pool: &PgPool, id: i64, opponent: Option<i64>) -> sqlx::Result<bool> {
     let mut tx = pool.begin().await?;
     let result =
         sqlx::query!("update images set hidden = true where id = $1", id).execute(&mut *tx).await?;
+    if result.rows_affected() == 0 {
+        return Ok(false);
+    }
     sqlx::query!("delete from slots where image_id = $1", id).execute(&mut *tx).await?;
+
+    if let Some(opponent) = opponent.filter(|opponent| *opponent != id) {
+        sqlx::query!("insert into pairs (winner_id, loser_id) values ($1, $2)", opponent, id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    sqlx::query!(
+        "insert into pairs (winner_id, loser_id)
+         select winner_id, $1 from (
+             select distinct p.winner_id from pairs p
+             join images w on w.id = p.winner_id
+             where w.species = (select species from images where id = $1)
+               and not w.hidden and p.winner_id <> $1
+         ) winners
+         order by random() limit $2",
+        id,
+        HIDE_LOSSES,
+    )
+    .execute(&mut *tx)
+    .await?;
+
     tx.commit().await?;
-    Ok(result.rows_affected() == 1)
+    Ok(true)
 }
 
 /// Record that one image beat another.

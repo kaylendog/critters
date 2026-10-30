@@ -127,7 +127,8 @@
   async function hide(side) {
     if (!current) return;
     try {
-      await api('/label/hide', { method: 'POST', body: JSON.stringify({ id: current[side].id }) });
+      const opponent = current[side === 'a' ? 'b' : 'a'].id;
+      await api('/label/hide', { method: 'POST', body: JSON.stringify({ id: current[side].id, opponent }) });
       status.textContent = `Hidden #${current[side].id}.`;
       await load();
     } catch (error) {

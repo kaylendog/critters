@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into pairs (winner_id, loser_id)\n         select winner_id, $1 from (\n             select distinct p.winner_id from pairs p\n             join images w on w.id = p.winner_id\n             where w.species = (select species from images where id = $1)\n               and not w.hidden and p.winner_id <> $1\n         ) winners\n         order by random() limit $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5de2b9cb603e9d947c318de37ff4b5fbf1d15f4ddb4326348c397e4255fc1474"
+}
