@@ -831,7 +831,7 @@ dependencies = [
 
 [[package]]
 name = "critter-discord"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -853,7 +853,7 @@ dependencies = [
 
 [[package]]
 name = "critter-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -880,7 +880,7 @@ dependencies = [
 
 [[package]]
 name = "critter-types"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "serde",
